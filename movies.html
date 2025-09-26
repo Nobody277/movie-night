@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./movienight.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <meta name="description" content="Browse movies on Movie Night.">
+    <meta name="theme-color" content="#151923">
+    <meta property="og:title" content="Movie Night - Movies">
+    <meta property="og:description" content="Browse movies on Movie Night.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="./movienight.svg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Movie Night - Movies">
+    <meta name="twitter:description" content="Browse movies on Movie Night.">
+    <meta name="twitter:image" content="./movienight.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Movie Night - Movies</title>
+    <style>
+      html{background:#0f1115}
+      body{margin:0;background:#0f1115;color:#e6e6e6}
+      body.no-fouc{visibility:hidden}
+    </style>
+  </head>
+  <body class="no-fouc">
+    <header class="site-header">
+      <div class="container">
+        <div class="header-row">
+          <h1 class="logo"><a href="home">Movie Night</a></h1>
+          <nav class="main-nav" aria-label="Primary">
+            <ul class="nav-list">
+              <li><a class="nav-link" href="home">Home</a></li>
+              <li><a class="nav-link" href="movies" aria-current="page">Movies</a></li>
+              <li><a class="nav-link" href="#">TV Shows</a></li>
+              <li><a class="nav-link" href="#">My List</a></li>
+              <li>
+                <div class="search-container">
+                  <button class="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="site-search">
+                    <svg class="search-icon" width="20" height="20" viewBox="0 0 640 640" fill="currentColor">
+                      <path d="M480 272C480 317.9 465.1 360.3 440 394.7L566.6 521.4C579.1 533.9 579.1 554.2 566.6 566.7C554.1 579.2 533.8 579.2 521.3 566.7L394.7 440C360.3 465.1 317.9 480 272 480C157.1 480 64 386.9 64 272C64 157.1 157.1 64 272 64C386.9 64 480 157.1 480 272zM272 416C351.5 416 416 351.5 416 272C416 192.5 351.5 128 272 128C192.5 128 128 192.5 128 272C128 351.5 192.5 416 272 416z"/>
+                    </svg>
+                  </button>
+                  <div class="search-box" id="site-search">
+                    <label class="sr-only" for="search-input">Search</label>
+                    <input id="search-input" type="text" placeholder="Search movies, TV shows..." class="search-input">
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="section page-header">
+        <h2 class="section-title page-title">Movies</h2>
+        <div class="controls-row">
+          <div class="sort-group">
+            <button class="sort-toggle" type="button" aria-expanded="false" aria-controls="sort-menu">
+              <span class="sort-label">Popularity</span>
+              <span class="sort-arrow" data-dir="desc">↓</span>
+            </button>
+            <div id="sort-menu" class="sort-menu" role="menu">
+              <button class="sort-option" role="menuitem" data-value="popularity:desc" data-label="Popularity" data-dir="desc"><span>Popularity</span><span class="arrow">↓</span></button>
+              <button class="sort-option" role="menuitem" data-value="popularity:asc" data-label="Popularity" data-dir="asc"><span>Popularity</span><span class="arrow">↑</span></button>
+              <button class="sort-option" role="menuitem" data-value="rating:desc" data-label="Rating" data-dir="desc"><span>Rating</span><span class="arrow">↓</span></button>
+              <button class="sort-option" role="menuitem" data-value="rating:asc" data-label="Rating" data-dir="asc"><span>Rating</span><span class="arrow">↑</span></button>
+              <button class="sort-option" role="menuitem" data-value="newest:desc" data-label="Newest" data-dir="desc"><span>Newest</span><span class="arrow">↓</span></button>
+              <button class="sort-option" role="menuitem" data-value="newest:asc" data-label="Newest" data-dir="asc"><span>Newest</span><span class="arrow">↑</span></button>
+            </div>
+          </div>
+
+          <div class="time-group">
+            <button class="time-toggle" type="button" aria-expanded="false" aria-controls="time-menu">
+              <span class="time-label">All time</span>
+            </button>
+            <div id="time-menu" class="time-menu" role="menu">
+              <button class="time-option" role="menuitem" data-value="all" data-label="All time"><span>All time</span></button>
+              <button class="time-option" role="menuitem" data-value="week" data-label="Past week"><span>Past week</span></button>
+              <button class="time-option" role="menuitem" data-value="month" data-label="Past month"><span>Past month</span></button>
+              <button class="time-option" role="menuitem" data-value="year" data-label="Past year"><span>Past year</span></button>
+            </div>
+          </div>
+
+          <div class="genres-group">
+            <button class="genres-toggle" type="button" aria-expanded="false" aria-controls="genres-panel">
+              Genres<span class="genres-counter" style="display: none;"> (0 selected)</span>
+            </button>
+            <div id="genres-panel" class="genres-panel">
+              <ul class="genres-list" role="list">
+                <li><input class="genre-input" type="checkbox" id="g-action"><label class="genre-label" for="g-action">Action</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-adventure"><label class="genre-label" for="g-adventure">Adventure</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-animation"><label class="genre-label" for="g-animation">Animation</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-biography"><label class="genre-label" for="g-biography">Biography</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-comedy"><label class="genre-label" for="g-comedy">Comedy</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-crime"><label class="genre-label" for="g-crime">Crime</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-documentary"><label class="genre-label" for="g-documentary">Documentary</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-drama"><label class="genre-label" for="g-drama">Drama</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-family"><label class="genre-label" for="g-family">Family</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-fantasy"><label class="genre-label" for="g-fantasy">Fantasy</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-history"><label class="genre-label" for="g-history">History</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-horror"><label class="genre-label" for="g-horror">Horror</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-music"><label class="genre-label" for="g-music">Music</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-musical"><label class="genre-label" for="g-musical">Musical</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-mystery"><label class="genre-label" for="g-mystery">Mystery</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-romance"><label class="genre-label" for="g-romance">Romance</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-sci-fi"><label class="genre-label" for="g-sci-fi">Sci‑Fi</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-sport"><label class="genre-label" for="g-sport">Sport</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-thriller"><label class="genre-label" for="g-thriller">Thriller</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-war"><label class="genre-label" for="g-war">War</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-western"><label class="genre-label" for="g-western">Western</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-biopic"><label class="genre-label" for="g-biopic">Biopic</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-film-noir"><label class="genre-label" for="g-film-noir">Film‑Noir</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-reality"><label class="genre-label" for="g-reality">Reality</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-talk-show"><label class="genre-label" for="g-talk-show">Talk‑Show</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-game-show"><label class="genre-label" for="g-game-show">Game‑Show</label></li>
+                <li><input class="genre-input" type="checkbox" id="g-news"><label class="genre-label" for="g-news">News</label></li>
+              </ul>
+            </div>
+          </div>
+
+          <button class="clear-filters" type="button">Clear Filters</button>
+          <button class="apply-filters" type="button">Search</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="movie-grid"></div>
+      </section>
+    </main>
+    <div aria-hidden="true" style="height: 40px"></div>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.10.0/lib/p5.min.js"></script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+  </html>
+
+
