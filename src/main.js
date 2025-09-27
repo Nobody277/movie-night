@@ -15,6 +15,26 @@ if (typeof document !== 'undefined') {
   }
 }
 
+function updateSiteIcons() {
+  try {
+    const faviconUrl = new URL('../movienight.svg', import.meta.url).href;
+
+    let link = document.querySelector('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.setAttribute('rel', 'icon');
+      document.head.appendChild(link);
+    }
+    link.setAttribute('type', 'image/svg+xml');
+    link.setAttribute('href', faviconUrl);
+
+    const og = document.querySelector('meta[property="og:image"]');
+    if (og) og.setAttribute('content', faviconUrl);
+    const tw = document.querySelector('meta[name="twitter:image"]');
+    if (tw) tw.setAttribute('content', faviconUrl);
+  } catch {}
+}
+
 /**
  * Handles SPA-like page transitions and reinitialization of interactive features.
  */
@@ -186,6 +206,8 @@ class PageTransition {
     
     this.reinitializeP5Animation();
     
+    updateSiteIcons();
+
     this.bindNavigationEvents();
   }
 
