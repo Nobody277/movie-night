@@ -46,7 +46,9 @@ const BAD_USER_AGENTS = [
   /python-requests/i,
   /scrapy/i,
   /go-http-client/i,
-  /httpclient/i
+  /httpclient/i,
+  /postman/i,
+  /insomnia/i,
 ];
 
 const limiter = new RateLimiter(30, 0.5);
