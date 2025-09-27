@@ -716,7 +716,6 @@ canvas.p5Canvas {
 }
 .rail-btn:hover { background: rgba(255,255,255,0.08); }
 
-/* Sub-pixel nudge to visually center the glyph in its box */
 .rail-btn .rail-icon { display:inline-block; transform: translateY(-1px); }
 
 .rail-track {
