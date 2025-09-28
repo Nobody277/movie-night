@@ -168,23 +168,48 @@ export function initializeRuntimeTags() {
  * @param {() => Promise<any|null>} fetchFunction - Fetcher returning TMDB results.
  * @returns {Promise<void>}
  */
-export async function populateRail(rail, fetchFunction) {
+export async function populateRail(rail, fetchFunction, options) {
   if (!rail) return;
   const track = rail.querySelector('.rail-track');
   if (!track) return;
 
-  track.innerHTML = '';
-  const skeletonCount = Math.min(10, Math.max(6, Math.floor(track.clientWidth / 190)));
-  for (let i = 0; i < skeletonCount; i++) {
-    track.appendChild(createSkeletonCard());
+  const opts = Object.assign({ minCards: 6, maxAttempts: 3, attempt: 0 }, options || {});
+
+  // Cancel any pending retry for this rail to avoid overlap
+  if (rail.dataset.retryTimeoutId) {
+    try { window.clearTimeout(Number(rail.dataset.retryTimeoutId)); } catch {}
+    delete rail.dataset.retryTimeoutId;
   }
+
+  // Only show skeletons on first attempt or when track is empty
+  const shouldShowSkeletons = opts.attempt === 0 || track.children.length === 0;
+  if (shouldShowSkeletons) {
+    track.innerHTML = '';
+    const skeletonCount = Math.min(10, Math.max(6, Math.floor(track.clientWidth / 190)));
+    for (let i = 0; i < skeletonCount; i++) {
+      track.appendChild(createSkeletonCard());
+    }
+  }
+
+  const scheduleRetry = () => {
+    if (opts.attempt >= opts.maxAttempts) return;
+    const delay = Math.min(10000, 1500 * Math.pow(2, opts.attempt)) + Math.floor(Math.random() * 300);
+    const id = window.setTimeout(() => {
+      if (!rail.isConnected) return;
+      populateRail(rail, fetchFunction, Object.assign({}, opts, { attempt: opts.attempt + 1 }));
+    }, delay);
+    rail.dataset.retryTimeoutId = String(id);
+  };
 
   try {
     const data = await fetchFunction();
-    if (!data || !data.results) return;
-    track.innerHTML = '';
-    const moviesWithPosters = data.results.filter(movie => movie.poster_path);
+    const results = Array.isArray(data?.results) ? data.results : [];
+    const moviesWithPosters = results.filter(movie => movie.poster_path);
     const movies = moviesWithPosters.slice(0, 20);
+
+    if (!movies.length) { scheduleRetry(); return; }
+
+    track.innerHTML = '';
     movies.forEach((movie, index) => {
       const card = createMovieCard(movie);
       card.style.animationDelay = `${Math.min(index, 12) * 40}ms`;
@@ -193,8 +218,11 @@ export async function populateRail(rail, fetchFunction) {
     initializeMovieCards();
     initializeRuntimeTags();
     rail.classList.add('revealed');
+
+    if (movies.length < opts.minCards) scheduleRetry();
   } catch (error) {
     console.error('Error populating rail:', error);
+    scheduleRetry();
   }
 }
 

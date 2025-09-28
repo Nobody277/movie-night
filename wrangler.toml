@@ -1,3 +1,7 @@
 name = "tmdb-proxy"
 main = "worker/tmdb-proxy.js"
 compatibility_date = "2024-09-01"
+
+[[kv_namespaces]]
+binding = "TMDB_CACHE"
+id = "bce4b545c592495a9e731446c90062e7"

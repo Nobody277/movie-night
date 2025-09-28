@@ -3,7 +3,7 @@ import { initBackground, destroyBackground } from "./background.js";
 import { fetchTMDBData, TMDB_IMAGE_BASE_URL } from "./api.js";
 import { initializeRuntimeTags, getGenreName, setupRail, initializeMovieCards } from "./ui.js";
 import { initializeHomePage } from "./home.js";
-import { initializeGenresToggle, initializeSortDropdown, initializeTimeDropdown, initializeControlButtons } from "./movies.js";
+import { initializeGenresToggle, initializeSortDropdown, initializeTimeDropdown, initializeControlButtons, initializeFeaturedHero, initializeMovieRails } from "./movies.js";
 
 // Remove initial no-FOUC class as soon as possible
 if (typeof document !== 'undefined') {
@@ -199,6 +199,8 @@ class PageTransition {
     initializeSortDropdown();
     initializeTimeDropdown();
     initializeControlButtons();
+    initializeFeaturedHero();
+    initializeMovieRails();
     initializeMovieCards();
     document.querySelectorAll('.rail').forEach(setupRail);
     

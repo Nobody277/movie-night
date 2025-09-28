@@ -54,7 +54,7 @@ const BAD_USER_AGENTS = [
 const limiter = new RateLimiter(30, 0.5);
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const allowedOrigin = env.ALLOWED_ORIGIN || DEFAULT_ORIGIN;
     const headers = corsHeaders(allowedOrigin);
     if (request.method === 'OPTIONS') {
@@ -88,6 +88,35 @@ export default {
       return new Response('Too Many Requests', { status: 429, headers });
     }
 
+    const isCacheable = request.method === 'GET' || request.method === 'HEAD';
+    const cacheKey = new Request(`https://tmdb-cache/${path}${url.search}`, { method: 'GET' });
+
+    if (isCacheable) {
+      const cached = await caches.default.match(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    if (isCacheable && env.TMDB_CACHE) {
+      const kvKey = `${path}${url.search}`;
+      try {
+        const kvValue = await env.TMDB_CACHE.get(kvKey);
+        if (kvValue) {
+          const kvResp = new Response(kvValue, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'public, s-maxage=7200, max-age=7200, stale-while-revalidate=86400',
+              ...headers,
+            }
+          });
+          try { ctx && ctx.waitUntil && ctx.waitUntil(caches.default.put(cacheKey, kvResp.clone())); } catch {}
+          return kvResp;
+        }
+      } catch {}
+    }
+
     const target = `https://api.themoviedb.org/3/${path}${url.search}`;
     const upstreamReq = new Request(target, {
       method: request.method,
@@ -99,13 +128,25 @@ export default {
     });
 
     const resp = await fetch(upstreamReq);
-    return new Response(resp.body, {
-      status: resp.status,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=60',
-        ...headers,
-      }
-    });
+
+    const mergedHeaders = {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, s-maxage=7200, max-age=7200, stale-while-revalidate=86400',
+      ...headers,
+    };
+
+    if (!isCacheable || resp.status >= 400) {
+      return new Response(resp.body, { status: resp.status, headers: mergedHeaders });
+    }
+
+    const cacheable = new Response(resp.body, { status: resp.status, headers: mergedHeaders });
+    try { await caches.default.put(cacheKey, cacheable.clone()); } catch {}
+    if (env.TMDB_CACHE) {
+      try {
+        const bodyText = await cacheable.clone().text();
+        await env.TMDB_CACHE.put(`${path}${url.search}`, bodyText, { expirationTtl: 7200 });
+      } catch {}
+    }
+    return cacheable;
   }
 };
