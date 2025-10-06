@@ -7,7 +7,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(process.cwd(), 'index.html'),
-        movies: resolve(process.cwd(), 'movies.html')
+        movies: resolve(process.cwd(), 'movies.html'),
+        tv: resolve(process.cwd(), 'tv.html')
       }
     }
   },
