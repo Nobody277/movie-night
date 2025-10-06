@@ -1,18 +1,9 @@
-/**
- * Background animation (p5.js) module.
- *
- * Renders a 2D wireframe grid with a subtle wave animation.
- *
- * @module background
- */
-
 let instance = null;
 
-/**
- * Initialize the background p5 sketch (idempotent).
- * Creates a full-screen canvas and starts the animation loop.
- */
-export function initBackground() {
+// Start the background animation... duh.
+// It's a 2d wireframe grid with a wave animation. Cause Ian didn't like the sperm animation.
+// Read about the code here p5js.org cause i'm not gonna explain it.
+export function startBackground() {
   if (!window.p5 || instance) return;
 
   const sketch = (p) => {
@@ -21,6 +12,7 @@ export function initBackground() {
     let gridSpacing = 48;
     let gridColorBase = { r: 255, g: 255, b: 255 };
     let targetFps = 60;
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function recomputeGrid() {
       const base = Math.min(p.width, p.height);
@@ -44,10 +36,24 @@ export function initBackground() {
         if (document.hidden) p.noLoop();
         else p.loop();
       });
+
+      try {
+        const css = getComputedStyle(document.documentElement).getPropertyValue('--grid-rgb').trim();
+        if (css) {
+          const parts = css.split(',').map(s => Number(s.trim()));
+          if (parts.length === 3 && parts.every(n => Number.isFinite(n))) {
+            gridColorBase = { r: parts[0] || 255, g: parts[1] || 255, b: parts[2] || 255 };
+          }
+        }
+      } catch {}
     };
 
     p.draw = function() {
       p.background(0);
+      if (reduceMotion) {
+        drawGridStatic();
+        return;
+      }
       drawGrid();
     };
 
@@ -89,15 +95,34 @@ export function initBackground() {
         p.line(x, 0, x, p.height);
       }
     }
+
+    function drawGridStatic() {
+      for (let i = 0; i < yLines.length; i++) {
+        const y = yLines[i];
+        const r = Math.floor(gridColorBase.r * 0.22);
+        const g = Math.floor(gridColorBase.g * 0.22);
+        const b = Math.floor(gridColorBase.b * 0.22);
+        p.stroke(r, g, b, 150);
+        p.strokeWeight(1);
+        p.line(0, y, p.width, y);
+      }
+      for (let i = 0; i < xLines.length; i++) {
+        const x = xLines[i];
+        const r = Math.floor(gridColorBase.r * 0.20);
+        const g = Math.floor(gridColorBase.g * 0.20);
+        const b = Math.floor(gridColorBase.b * 0.20);
+        p.stroke(r, g, b, 150);
+        p.strokeWeight(1);
+        p.line(x, 0, x, p.height);
+      }
+    }
   };
 
   instance = new window.p5(sketch);
   window.p5Instance = instance;
 }
 
-/**
- * Destroy the background p5 sketch and remove its canvas.
- */
+// Helper to kill the background.
 export function destroyBackground() {
   try {
     if (instance && typeof instance.remove === 'function') {

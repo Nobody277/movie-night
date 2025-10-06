@@ -7,18 +7,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
-    <meta name="description" content="Watch movies with friends you don't have.">
+    <meta name="description" content="Watch TV shows with friends you don't have.">
     <meta name="theme-color" content="#151923">
-    <meta property="og:title" content="Movie Night - Movies">
-    <meta property="og:description" content="Watch movies with friends you don't have.">
+    <meta property="og:title" content="Movie Night - TV Shows">
+    <meta property="og:description" content="Watch TV shows with friends you don't have.">
     <meta property="og:type" content="website">
     <meta property="og:image" content="./movienight.svg">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Movie Night - Movies">
-    <meta name="twitter:description" content="Watch movies with friends you don't have.">
+    <meta name="twitter:title" content="Movie Night - TV Shows">
+    <meta name="twitter:description" content="Watch TV shows with friends you don't have.">
     <meta name="twitter:image" content="./movienight.svg">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Movie Night - Movies</title>
+    <title>Movie Night - TV Shows</title>
     <style>
       html{background:#0f1115}
       body{margin:0;background:#0f1115;color:#e6e6e6}
@@ -33,8 +33,8 @@
           <nav class="main-nav" aria-label="Primary">
             <ul class="nav-list">
               <li><a class="nav-link" href="home">Home</a></li>
-              <li><a class="nav-link" href="movies" aria-current="page">Movies</a></li>
-              <li><a class="nav-link" href="tv">TV Shows</a></li>
+              <li><a class="nav-link" href="movies">Movies</a></li>
+              <li><a class="nav-link" href="tv" aria-current="page">TV Shows</a></li>
               <li><a class="nav-link" href="my-list">My List</a></li>
               <li>
                 <div class="search-container">
@@ -45,7 +45,7 @@
                   </button>
                   <div class="search-box" id="site-search">
                     <label class="sr-only" for="search-input">Search</label>
-                    <input id="search-input" type="text" placeholder="Search movies, TV shows..." class="search-input">
+                    <input id="search-input" type="text" placeholder="Search TV shows, movies..." class="search-input">
                   </div>
                 </div>
               </li>
@@ -57,7 +57,7 @@
 
     <main class="container">
       <section class="section page-header">
-        <h2 class="section-title page-title">Movies</h2>
+        <h2 class="section-title page-title">TV Shows</h2>
         <div class="controls-row">
           <div class="sort-group">
             <button class="sort-toggle" type="button" aria-expanded="false" aria-controls="sort-menu">
@@ -91,35 +91,7 @@
               Genres<span class="genres-counter" style="display: none;"> (0 selected)</span>
             </button>
             <div id="genres-panel" class="genres-panel">
-              <ul class="genres-list" role="list">
-                <li><input class="genre-input" type="checkbox" id="g-action"><label class="genre-label" for="g-action">Action</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-adventure"><label class="genre-label" for="g-adventure">Adventure</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-animation"><label class="genre-label" for="g-animation">Animation</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-biography"><label class="genre-label" for="g-biography">Biography</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-comedy"><label class="genre-label" for="g-comedy">Comedy</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-crime"><label class="genre-label" for="g-crime">Crime</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-documentary"><label class="genre-label" for="g-documentary">Documentary</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-drama"><label class="genre-label" for="g-drama">Drama</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-family"><label class="genre-label" for="g-family">Family</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-fantasy"><label class="genre-label" for="g-fantasy">Fantasy</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-history"><label class="genre-label" for="g-history">History</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-horror"><label class="genre-label" for="g-horror">Horror</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-music"><label class="genre-label" for="g-music">Music</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-musical"><label class="genre-label" for="g-musical">Musical</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-mystery"><label class="genre-label" for="g-mystery">Mystery</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-romance"><label class="genre-label" for="g-romance">Romance</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-sci-fi"><label class="genre-label" for="g-sci-fi">Sci‑Fi</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-sport"><label class="genre-label" for="g-sport">Sport</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-thriller"><label class="genre-label" for="g-thriller">Thriller</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-war"><label class="genre-label" for="g-war">War</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-western"><label class="genre-label" for="g-western">Western</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-biopic"><label class="genre-label" for="g-biopic">Biopic</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-film-noir"><label class="genre-label" for="g-film-noir">Film‑Noir</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-reality"><label class="genre-label" for="g-reality">Reality</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-talk-show"><label class="genre-label" for="g-talk-show">Talk‑Show</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-game-show"><label class="genre-label" for="g-game-show">Game‑Show</label></li>
-                <li><input class="genre-input" type="checkbox" id="g-news"><label class="genre-label" for="g-news">News</label></li>
-              </ul>
+              <ul class="genres-list" role="list"></ul>
             </div>
           </div>
 
@@ -127,7 +99,7 @@
           <button class="apply-filters" type="button">Search</button>
         </div>
       </section>
-      <section class="section featured-hero" aria-label="Featured movie of the week"></section>
+      <section class="section featured-hero" aria-label="Featured show of the week"></section>
       <section class="section">
         <div class="genre-rails" aria-live="polite"></div>
       </section>
@@ -137,3 +109,5 @@
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>
+
+

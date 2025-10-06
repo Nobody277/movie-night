@@ -1,13 +1,7 @@
-/**
- * UI helpers: DOM builders, runtime tags, rails, and interactions.
- *
- * @module ui
- */
-
-import { TMDB_IMAGE_BASE_URL, getTitleRuntime } from "./api.js";
+import { img, getTitleRuntime } from "./api.js";
 
 /**
- * Return a human-readable genre name for a TMDB genre id.
+ * Returns the genre name given a id from TMDB.
  * @param {number} id - TMDB genre id.
  * @returns {string}
  */
@@ -28,9 +22,10 @@ export function getGenreName(id) {
  * @param {number|null} minutes
  * @returns {string}
  */
-export function formatMinutes(minutes) {
-  if (minutes == null || isNaN(minutes)) return '--';
-  const total = Math.max(0, Math.floor(Number(minutes)));
+export function formatMinutesOrEpisodes(value, mediaType) {
+  if (value == null || isNaN(value)) return '--';
+  const total = Math.max(0, Math.floor(Number(value)));
+  if (mediaType === 'tv') return `${total} Eps`;
   return `${total}min`;
 }
 
@@ -49,17 +44,21 @@ export function formatMinutes(minutes) {
 export function createMovieCard(movie) {
   const card = document.createElement('article');
   card.className = 'movie-card';
+  try { card.setAttribute('tabindex', '0'); } catch {}
 
-  const posterUrl = movie.poster_path ? `${TMDB_IMAGE_BASE_URL}${movie.poster_path}` : null;
-  const rating = movie.vote_average ? movie.vote_average.toFixed(1) : 'N/A';
-  const releaseYear = movie.release_date ? new Date(movie.release_date).getFullYear() : 'N/A';
+  const posterUrl = movie.poster_path ? img.poster(movie.poster_path) : null;
+  const rating = typeof movie.vote_average === 'number' ? movie.vote_average.toFixed(1) : 'N/A';
+  const title = movie.title || movie.name || '';
+  const releaseYear = (movie.release_date || movie.first_air_date) ? new Date(movie.release_date || movie.first_air_date).getFullYear() : 'N/A';
   const genres = movie.genre_ids ? movie.genre_ids.slice(0, 2).map(id => getGenreName(id)).join(', ') : '';
-  const mediaType = movie.media_type || 'movie';
+  const mediaType = movie.media_type || (movie.first_air_date ? 'tv' : 'movie');
+
+  try { card.setAttribute('data-id', String(movie.id)); card.setAttribute('data-type', mediaType); } catch {}
 
   card.innerHTML = `
-    ${posterUrl ? `<img src="${posterUrl}" alt="${movie.title}" class="poster-img" loading="lazy">` : '<div class="poster-skeleton"></div>'}
+    ${posterUrl ? `<img src="${posterUrl}" alt="${title}" class="poster-img" loading="lazy">` : '<div class="poster-skeleton"></div>'}
     <div class="movie-info">
-      <h3 class="movie-title">${movie.title}</h3>
+      <h3 class="movie-title">${title}</h3>
     </div>
     <div class="movie-overlay">
       <div class="overlay-content">
@@ -68,7 +67,7 @@ export function createMovieCard(movie) {
         ${genres ? `<div class="overlay-genres">${genres}</div>` : ''}
         <div class="overlay-tags">
           <span class="meta-tag type">${mediaType === 'tv' ? 'Show' : 'Movie'}</span>
-          <span class="meta-tag runtime"><span class="meta-runtime" data-id="${movie.id}" data-type="${mediaType}">--:--</span></span>
+          <span class="meta-tag runtime"><span class="meta-runtime" data-id="${movie.id}" data-type="${mediaType}">--</span></span>
         </div>
       </div>
     </div>
@@ -82,19 +81,9 @@ export function createMovieCard(movie) {
     }
   }
 
-  const adjustOverlayHeight = () => {
-    const movieInfo = card.querySelector('.movie-info');
-    const overlay = card.querySelector('.movie-overlay');
-    if (movieInfo && overlay) {
-      const cardRect = card.getBoundingClientRect();
-      const infoRect = movieInfo.getBoundingClientRect();
-      const bottomOffset = cardRect.bottom - infoRect.top - 1;
-      overlay.style.bottom = `${bottomOffset}px`;
-    }
-  };
-
-  setTimeout(adjustOverlayHeight, 0);
-  window.addEventListener('resize', adjustOverlayHeight);
+  requestAnimationFrame(() => adjustOverlayHeightFor(card));
+  const ro = ensureCardOverlayResizeObserver();
+  ro.observe(card);
   return card;
 }
 
@@ -116,13 +105,54 @@ export function createSkeletonCard() {
   return card;
 }
 
-/** Singleton intersection observer for runtime tags. */
 let runtimeObserver = null;
+let cardOverlayResizeObserver = null;
+let addTooltip = null;
+let pendingRuntimeUpdates = [];
+let runtimeFlushScheduled = false;
 
-/**
- * Observe and lazily populate runtime badges when in view.
- * @returns {IntersectionObserver}
- */
+function getAddTooltip() {
+  if (!addTooltip) {
+    addTooltip = document.createElement('div');
+    addTooltip.className = 'card-add-tooltip';
+    addTooltip.textContent = 'Add to My List';
+    document.body.appendChild(addTooltip);
+  }
+  return addTooltip;
+}
+
+function adjustOverlayHeightFor(card) {
+  const movieInfo = card.querySelector('.movie-info');
+  const overlay = card.querySelector('.movie-overlay');
+  if (movieInfo && overlay) {
+    const cardRect = card.getBoundingClientRect();
+    const infoRect = movieInfo.getBoundingClientRect();
+    const bottomOffset = cardRect.bottom - infoRect.top - 1;
+    overlay.style.bottom = `${bottomOffset}px`;
+  }
+}
+
+function ensureCardOverlayResizeObserver() {
+  if (cardOverlayResizeObserver) return cardOverlayResizeObserver;
+  cardOverlayResizeObserver = new ResizeObserver((entries) => {
+    entries.forEach((entry) => {
+      const el = entry.target;
+      if (el && el.classList && el.classList.contains('movie-card')) adjustOverlayHeightFor(el);
+    });
+  });
+  return cardOverlayResizeObserver;
+}
+
+function scheduleRuntimeFlush() {
+  if (runtimeFlushScheduled) return;
+  runtimeFlushScheduled = true;
+  Promise.resolve().then(() => {
+    const list = pendingRuntimeUpdates.splice(0);
+    runtimeFlushScheduled = false;
+    list.forEach(({ el, val, type }) => { el.textContent = formatMinutesOrEpisodes(val, type); });
+  });
+}
+
 export function ensureRuntimeObserver() {
   if (runtimeObserver) return runtimeObserver;
   runtimeObserver = new IntersectionObserver((entries, obs) => {
@@ -133,9 +163,9 @@ export function ensureRuntimeObserver() {
       const id = el.getAttribute('data-id');
       const type = el.getAttribute('data-type') || 'movie';
       if (!id) return;
-      getTitleRuntime(id, type).then((mins) => {
+      getTitleRuntime(id, type).then((val) => {
         const inSearchItem = !!el.closest('.search-item');
-        if (inSearchItem && (!mins || mins <= 0)) {
+        if (inSearchItem && (!val || val <= 0)) {
           const item = el.closest('.search-item');
           if (item) {
             const results = item.closest('.search-results');
@@ -147,17 +177,15 @@ export function ensureRuntimeObserver() {
           }
           return;
         }
-        el.textContent = formatMinutes(mins);
+        pendingRuntimeUpdates.push({ el, val, type });
+        scheduleRuntimeFlush();
       });
     });
   }, { rootMargin: '200px 0px' });
   return runtimeObserver;
 }
 
-/**
- * Start observing all `.meta-runtime` elements on the page.
- */
-export function initializeRuntimeTags() {
+export function startRuntimeTags() {
   const observer = ensureRuntimeObserver();
   document.querySelectorAll('.meta-runtime').forEach((el) => observer.observe(el));
 }
@@ -173,15 +201,13 @@ export async function populateRail(rail, fetchFunction, options) {
   const track = rail.querySelector('.rail-track');
   if (!track) return;
 
-  const opts = Object.assign({ minCards: 6, maxAttempts: 3, attempt: 0 }, options || {});
+  const opts = Object.assign({ minCards: 20, maxAttempts: 3, attempt: 0 }, options || {});
 
-  // Cancel any pending retry for this rail to avoid overlap
   if (rail.dataset.retryTimeoutId) {
     try { window.clearTimeout(Number(rail.dataset.retryTimeoutId)); } catch {}
     delete rail.dataset.retryTimeoutId;
   }
 
-  // Only show skeletons on first attempt or when track is empty
   const shouldShowSkeletons = opts.attempt === 0 || track.children.length === 0;
   if (shouldShowSkeletons) {
     track.innerHTML = '';
@@ -202,6 +228,17 @@ export async function populateRail(rail, fetchFunction, options) {
   };
 
   try {
+    const mo = new MutationObserver(() => {
+      if (!rail.isConnected && rail.dataset.retryTimeoutId) {
+        try { window.clearTimeout(Number(rail.dataset.retryTimeoutId)); } catch {}
+        delete rail.dataset.retryTimeoutId;
+        try { mo.disconnect(); } catch {}
+      }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  } catch {}
+
+  try {
     const data = await fetchFunction();
     const results = Array.isArray(data?.results) ? data.results : [];
     const moviesWithPosters = results.filter(movie => movie.poster_path);
@@ -215,8 +252,8 @@ export async function populateRail(rail, fetchFunction, options) {
       card.style.animationDelay = `${Math.min(index, 12) * 40}ms`;
       track.appendChild(card);
     });
-    initializeMovieCards();
-    initializeRuntimeTags();
+    startMovieCards();
+    startRuntimeTags();
     rail.classList.add('revealed');
 
     if (movies.length < opts.minCards) scheduleRetry();
@@ -226,10 +263,7 @@ export async function populateRail(rail, fetchFunction, options) {
   }
 }
 
-/**
- * Enhance movie cards with controls and title tooltips.
- */
-export function initializeMovieCards() {
+export function startMovieCards() {
   const cards = document.querySelectorAll('.movie-card');
   cards.forEach((card) => {
     if (card.querySelector('.card-add')) return;
@@ -243,12 +277,7 @@ export function initializeMovieCards() {
       btn.blur();
     });
     card.appendChild(btn);
-
-    const tooltip = document.createElement('div');
-    tooltip.className = 'card-add-tooltip';
-    tooltip.textContent = 'Add to My List';
-    document.body.appendChild(tooltip);
-
+    const tooltip = getAddTooltip();
     btn.addEventListener('mouseenter', () => {
       const rect = btn.getBoundingClientRect();
       tooltip.style.left = `${rect.right + 8}px`;
@@ -282,23 +311,25 @@ export function initializeMovieCards() {
   });
 }
 
-/**
- * Initialize scroll, keyboard, and drag interactions for a horizontal rail.
- * @param {HTMLElement} sectionEl - Section element with `.rail-track`.
- */
 export function setupRail(sectionEl) {
   const track = sectionEl.querySelector('.rail-track');
   const prev = sectionEl.querySelector('.rail-prev');
   const next = sectionEl.querySelector('.rail-next');
   if (!track) return;
 
+  try {
+    sectionEl.setAttribute('role', 'region');
+    const title = sectionEl.querySelector('.section-title');
+    if (title && title.textContent) sectionEl.setAttribute('aria-label', title.textContent);
+  } catch {}
+
   const step = () => Math.round(track.clientWidth * 0.9);
   prev && prev.addEventListener('click', () => track.scrollBy({ left: -step(), behavior: 'smooth' }));
   next && next.addEventListener('click', () => track.scrollBy({ left: step(), behavior: 'smooth' }));
 
   track.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight') track.scrollBy({ left: step(), behavior: 'smooth' });
-    if (e.key === 'ArrowLeft') track.scrollBy({ left: -step(), behavior: 'smooth' });
+    if (e.key === 'ArrowRight') { e.preventDefault(); track.scrollBy({ left: step(), behavior: 'smooth' }); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); track.scrollBy({ left: -step(), behavior: 'smooth' }); }
   });
 
   let dragging = false, startX = 0, startScroll = 0;
@@ -313,4 +344,10 @@ export function setupRail(sectionEl) {
   track.addEventListener('touchstart', e => start(e.touches[0].pageX), { passive: true });
   track.addEventListener('touchmove', e => move(e.touches[0].pageX), { passive: true });
   window.addEventListener('touchend', end);
+}
+
+export function disposeUI() {
+  try { if (runtimeObserver) { runtimeObserver.disconnect(); runtimeObserver = null; } } catch {}
+  try { if (cardOverlayResizeObserver) { cardOverlayResizeObserver.disconnect(); cardOverlayResizeObserver = null; } } catch {}
+  try { if (addTooltip) { addTooltip.classList.remove('visible'); } } catch {}
 }

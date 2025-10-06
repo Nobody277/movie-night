@@ -774,7 +774,7 @@ canvas.p5Canvas {
   background-size: cover;
   background-position: center;
   filter: brightness(0.9) saturate(110%);
-  transform: scale(1.06);
+  transform: scale(1);
   will-change: transform, opacity;
 }
 
@@ -796,8 +796,8 @@ canvas.p5Canvas {
 }
 
 @keyframes heroKenBurns {
-  0% { transform: scale(1.06) translate3d(0,0,0); }
-  100% { transform: scale(1.16) translate3d(2%, 0, 0); }
+  0% { transform: scale(1) translate3d(0,0,0); }
+  100% { transform: scale(1.08) translate3d(1%, 0, 0); }
 }
 
 @keyframes heroFadeIn {

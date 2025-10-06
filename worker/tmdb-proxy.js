@@ -1,9 +1,3 @@
-/**
- * Cloudflare Worker: TMDB proxy with Bearer secret.
- *
- * - Set secret: wrangler secret put TMDB_BEARER
- * - Deploy: wrangler deploy
- */
 const DEFAULT_ORIGIN = '*';
 const corsHeaders = (origin) => ({
   'Access-Control-Allow-Origin': origin || DEFAULT_ORIGIN,
@@ -12,7 +6,6 @@ const corsHeaders = (origin) => ({
 });
 
 class RateLimiter {
-  /** @param {number} capacity tokens, @param {number} refillPerSec tokens/sec */
   constructor(capacity, refillPerSec) {
     this.capacity = capacity;
     this.refillPerSec = refillPerSec;
@@ -68,7 +61,7 @@ export default {
     const bearer = env.TMDB_BEARER;
     if (!bearer) return new Response('Missing TMDB_BEARER', { status: 500, headers });
 
-    // Origin enforcement (if configured)
+    // Origin enforcement (placeholder)
     if (allowedOrigin !== '*' ) {
       const origin = request.headers.get('Origin') || '';
       const referer = request.headers.get('Referer') || '';
@@ -76,13 +69,13 @@ export default {
       if (!ok) return new Response('Forbidden', { status: 403, headers });
     }
 
-    // Bot UA block (simple)
+    // Bot User Agent block
     const ua = request.headers.get('User-Agent') || '';
     if (BAD_USER_AGENTS.some(rx => rx.test(ua))) {
       return new Response('Blocked', { status: 403, headers });
     }
 
-    // Rate limit per IP
+    // Rate limit per IP address
     const ip = request.headers.get('CF-Connecting-IP') || '0.0.0.0';
     if (!limiter.allow(ip)) {
       return new Response('Too Many Requests', { status: 429, headers });
