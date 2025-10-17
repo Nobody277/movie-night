@@ -164,11 +164,12 @@ function resolveFilters() {
   let endDate = formatDate(today);
   if (timeValue === 'week') { const d = new Date(); d.setDate(d.getDate() - 7); startDate = formatDate(d); }
   else if (timeValue === 'month') { const d = new Date(); d.setDate(d.getDate() - 30); startDate = formatDate(d); }
+  else if (timeValue === '6months') { const d = new Date(); d.setMonth(d.getMonth() - 6); startDate = formatDate(d); }
   else if (timeValue === 'year') { const d = new Date(); d.setFullYear(d.getFullYear() - 1); startDate = formatDate(d); }
   else { startDate = null; endDate = null; }
 
   if (!startDate && !endDate && sortBy.startsWith('popularity')) {
-    sortBy = 'vote_count.desc';
+    sortBy = `vote_count.${sortDir}`;
   }
 
   const checked = Array.from(document.querySelectorAll('.genre-input[data-genre-id]:checked'));
@@ -206,7 +207,10 @@ async function startFeaturedHero(config, filters) {
   if (!hero) return;
   try {
     hero.classList.add('loading');
-    const strongSignals = filters.sortBy.startsWith('vote_average') ? { voteAverageGte: 6.5, voteCountGte: 100 } : { voteCountGte: 50 };
+    const isRatingSort = filters.sortBy.startsWith('vote_average');
+    const isAllTime = !filters.startDate && !filters.endDate;
+    const voteCountMin = isRatingSort ? (isAllTime ? 1000 : 300) : 50;
+    const strongSignals = isRatingSort ? { voteAverageGte: 7.0, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
     const normalizeSort = (s, media) => media === 'tv' ? s.replace('primary_release_date', 'first_air_date') : s;
     const sort = normalizeSort(filters.sortBy, config.mediaType);
     const releaseDesc = config.mediaType === 'tv' ? 'first_air_date.desc' : 'primary_release_date.desc';
@@ -312,7 +316,10 @@ function findBaseGenres(config, filters) {
 }
 
 function buildFetcherFactory(config, filters, seenIds) {
-  const strongSignals = filters.sortBy.startsWith('vote_average') ? { voteAverageGte: 6.5, voteCountGte: 100 } : { voteCountGte: 50 };
+  const isRatingSort = filters.sortBy.startsWith('vote_average');
+  const isAllTime = !filters.startDate && !filters.endDate;
+  const voteCountMin = isRatingSort ? (isAllTime ? 1000 : 300) : 50;
+  const strongSignals = isRatingSort ? { voteAverageGte: 7.0, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
   const releaseDesc = config.mediaType === 'tv' ? 'first_air_date.desc' : 'primary_release_date.desc';
   return (gid) => async () => {
     const base = await config.discover({ sortBy: filters.sortBy, startDate: filters.startDate, endDate: filters.endDate, genreIds: [gid], page: 1, ...strongSignals });
@@ -378,9 +385,10 @@ async function renderGrid(config, filters) {
   const sortBy = normalizeSort(filters.sortBy, config.mediaType);
   const isAllMatch = !!filters.mustContainAll && Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length >= 1;
   const clientFilterAll = isAllMatch && Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length >= 2;
-  const strongSignals = isAllMatch
-    ? {}
-    : (filters.sortBy.startsWith('vote_average') ? { voteAverageGte: 6.5, voteCountGte: 100 } : { voteCountGte: 50 });
+  const isRatingSort = filters.sortBy.startsWith('vote_average');
+  const isAllTime = !filters.startDate && !filters.endDate;
+  const voteCountMin = isRatingSort ? (isAllTime ? 1000 : 300) : 50;
+  const strongSignals = isRatingSort ? { voteAverageGte: 7.0, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
   const genreIds = isAllMatch
     ? filters.selectedGenreIds
     : (Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length === 1 ? [filters.selectedGenreIds[0]] : []);

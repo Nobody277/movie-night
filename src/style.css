@@ -895,3 +895,46 @@ canvas.p5Canvas {
     grid-template-columns: repeat(auto-fill, minmax(var(--poster-min), 1fr));
   }
 }
+
+/* Mobile tweaks */
+@media (max-width: 600px) {
+  :root { --poster-min: 140px; }
+
+  .container { padding: 0 12px; }
+
+  .header-row { padding: 10px 0; }
+  .nav-link { font-size: 13px; padding: 6px 6px; }
+
+  .search-box { max-width: calc(100vw - 24px); }
+  .search-box.active { width: min(240px, calc(100vw - 24px)); }
+  .search-item { grid-template-columns: 32px 1fr; gap: 10px; }
+  .search-thumb { width: 32px; height: 48px; }
+  .search-title { font-size: 13px; }
+  .search-meta .meta-tag { font-size: 9px; padding: 2px 5px; }
+
+  .controls-row { flex-wrap: wrap; gap: 8px; }
+  .genres-toggle, .sort-toggle, .time-toggle, .apply-filters, .clear-filters { font-size: 13px; padding: 6px 8px; }
+  .genres-counter { font-size: 12px; }
+
+  .genres-panel { left: 8px; right: 8px; width: auto; max-height: 70vh; }
+  .genres-list { gap: 6px 4px; }
+  .genre-label { padding: 6px 8px; font-size: 12px; }
+
+  .movie-grid { gap: 12px; }
+  .movie-title { font-size: 13px; }
+  .meta-tag { font-size: 10px; padding: 2px 7px; }
+
+  .rail-track { gap: 12px; }
+  .rail-btn { width: 26px; height: 26px; }
+
+  .featured-hero { min-height: 240px; }
+  .featured-hero-content { min-height: 240px; padding: 16px; }
+  .featured-title { font-size: 22px; }
+  .btn { padding: 7px 10px; font-size: 13px; }
+}
+
+@media (max-width: 400px) {
+  :root { --poster-min: 120px; }
+  .search-box.active { width: min(200px, calc(100vw - 24px)); }
+  .featured-title { font-size: 20px; }
+}
