@@ -110,6 +110,29 @@ let cardOverlayResizeObserver = null;
 let addTooltip = null;
 let pendingRuntimeUpdates = [];
 let runtimeFlushScheduled = false;
+const RUNTIME_MAX_CONCURRENCY = 6;
+let runtimeActiveCount = 0;
+const runtimeQueue = [];
+const runtimePendingByKey = new Map(); // key -> { elements:Set<HTMLElement>, type:string }
+
+function pumpRuntimeQueue() {
+  while (runtimeActiveCount < RUNTIME_MAX_CONCURRENCY && runtimeQueue.length > 0) {
+    const task = runtimeQueue.shift();
+    if (!task) break;
+    runtimeActiveCount += 1;
+    Promise.resolve()
+      .then(task)
+      .finally(() => {
+        runtimeActiveCount -= 1;
+        pumpRuntimeQueue();
+      });
+  }
+}
+
+function enqueueRuntimeTask(fn) {
+  runtimeQueue.push(fn);
+  pumpRuntimeQueue();
+}
 
 function getAddTooltip() {
   if (!addTooltip) {
@@ -163,33 +186,36 @@ export function ensureRuntimeObserver() {
       const id = el.getAttribute('data-id');
       const type = el.getAttribute('data-type') || 'movie';
       if (!id) return;
-      const attemptFetch = async () => {
-        let val = await getTitleRuntime(id, type);
-        if (val == null || Number(val) <= 0) {
-          try {
-            await new Promise((r) => setTimeout(r, 250 + Math.floor(Math.random() * 250)));
-            val = await getTitleRuntime(id, type);
-          } catch {}
-        }
-        return val;
-      };
-      attemptFetch().then((val) => {
-        const inSearchItem = !!el.closest('.search-item');
-        if (inSearchItem && (!val || val <= 0)) {
-          const item = el.closest('.search-item');
-          if (item) {
-            const results = item.closest('.search-results');
-            item.remove();
-            if (results && results.querySelectorAll('.search-item').length === 0) {
-              results.classList.remove('open');
-              results.innerHTML = '';
+      const key = `${type}:${id}`;
+      let bucket = runtimePendingByKey.get(key);
+      if (!bucket) {
+        bucket = { elements: new Set(), type };
+        runtimePendingByKey.set(key, bucket);
+        enqueueRuntimeTask(async () => {
+          let val = null;
+          try { val = await getTitleRuntime(id, type); } catch {}
+          const targets = Array.from(bucket.elements);
+          runtimePendingByKey.delete(key);
+          targets.forEach((targetEl) => {
+            const inSearchItem = !!targetEl.closest('.search-item');
+            if (inSearchItem && (!val || val <= 0)) {
+              const item = targetEl.closest('.search-item');
+              if (item) {
+                const results = item.closest('.search-results');
+                item.remove();
+                if (results && results.querySelectorAll('.search-item').length === 0) {
+                  results.classList.remove('open');
+                  results.innerHTML = '';
+                }
+              }
+              return;
             }
-          }
-          return;
-        }
-        pendingRuntimeUpdates.push({ el, val, type });
-        scheduleRuntimeFlush();
-      });
+            pendingRuntimeUpdates.push({ el: targetEl, val, type });
+          });
+          scheduleRuntimeFlush();
+        });
+      }
+      bucket.elements.add(el);
     });
   }, { rootMargin: '200px 0px' });
   return runtimeObserver;

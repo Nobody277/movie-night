@@ -372,7 +372,7 @@ async function renderGrid(config, filters) {
     grid.querySelectorAll('.skeleton').forEach((el) => el.remove());
   };
 
-  addSkeletons(12);
+  addSkeletons(6);
 
   const normalizeSort = (s, media) => media === 'tv' ? s.replace('primary_release_date', 'first_air_date') : s;
   const sortBy = normalizeSort(filters.sortBy, config.mediaType);
@@ -419,6 +419,27 @@ async function renderGrid(config, filters) {
     });
   };
 
+  const appendInChunks = async (items, chunkSize = 6) => {
+    for (let i = 0; i < items.length; i += chunkSize) {
+      const slice = items.slice(i, i + chunkSize);
+      appendCards(slice);
+      startMovieCards();
+      startRuntimeTags();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+  };
+
+  let prefetched = null;
+  let prefetchInFlight = null;
+  const prefetchNext = async () => {
+    if (prefetchInFlight || !hasMore) return;
+    const args = activeArgsBuilder(page);
+    prefetchInFlight = fetchPage(args)
+      .then((res) => { prefetched = res; })
+      .catch(() => { /* ignore */ })
+      .finally(() => { prefetchInFlight = null; });
+  };
+
   const primaryArgs = (p) => ({ sortBy, startDate: filters.startDate, endDate: filters.endDate, genreIds, page: p, ...strongSignals });
   const popularityWindowArgs = (p) => ({ sortBy: 'popularity.desc', startDate: filters.startDate, endDate: filters.endDate, genreIds, page: p, voteCountGte: isAllMatch ? undefined : 20 });
   const voteCountAllTimeArgs = (p) => ({ sortBy: 'vote_count.desc', genreIds, page: p, voteCountGte: 50 });
@@ -434,42 +455,37 @@ async function renderGrid(config, filters) {
         if (items.length > 0) {
           if (tp) totalPages = tp;
           clearSkeletons();
-          appendCards(items);
-          startMovieCards();
-          startRuntimeTags();
+          await appendInChunks(items);
           activeArgsBuilder = (p) => primaryArgs(p);
           page = 2;
+          await prefetchNext();
         } else {
           const popRes = await fetchPage(popularityWindowArgs(1));
           if (popRes.items.length > 0) {
             if (popRes.totalPages) totalPages = popRes.totalPages;
             clearSkeletons();
-            appendCards(popRes.items);
-            startMovieCards();
-            startRuntimeTags();
+            await appendInChunks(popRes.items);
             activeArgsBuilder = (p) => popularityWindowArgs(p);
             page = 2;
+            await prefetchNext();
           } else {
             const vcRes = await fetchPage(voteCountAllTimeArgs(1));
             if (vcRes.items.length > 0) {
               if (vcRes.totalPages) totalPages = vcRes.totalPages;
               clearSkeletons();
-              appendCards(vcRes.items);
-              startMovieCards();
-              startRuntimeTags();
+              await appendInChunks(vcRes.items);
               activeArgsBuilder = (p) => voteCountAllTimeArgs(p);
               page = 2;
+              await prefetchNext();
             } else {
-              // Last-resort fallback: all-time popularity with no vote thresholds
               const popAll = await fetchPage(popularityAllTimeArgs(1));
               if (popAll.items.length > 0) {
                 clearSkeletons();
-                appendCards(popAll.items);
-                startMovieCards();
-                startRuntimeTags();
+                await appendInChunks(popAll.items);
                 activeArgsBuilder = (p) => popularityAllTimeArgs(p);
                 page = 2;
                 totalPages = popAll.totalPages ?? totalPages;
+                await prefetchNext();
               } else {
               hasMore = false;
               clearSkeletons();
@@ -484,14 +500,20 @@ async function renderGrid(config, filters) {
           }
         }
       } else {
-        const { items } = await fetchPage(activeArgsBuilder(page));
+        let data;
+        if (prefetched && Array.isArray(prefetched.items)) {
+          data = prefetched;
+          prefetched = null;
+        } else {
+          data = await fetchPage(activeArgsBuilder(page));
+        }
+        const { items } = data;
         if (items.length === 0) {
           hasMore = false;
         } else {
-          appendCards(items);
-          startMovieCards();
-          startRuntimeTags();
+          await appendInChunks(items);
           page += 1;
+          await prefetchNext();
         }
       }
       if (Number.isFinite(totalPages)) {

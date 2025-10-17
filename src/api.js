@@ -362,20 +362,23 @@ export async function getTopTVGenres({ startDate = null, endDate = null, sortBy 
  */
 export async function getTitleRuntime(id, mediaType = 'movie') {
   const key = `${mediaType}:${id}`;
-  if (runtimeCache.has(key)) return runtimeCache.get(key);
+  if (runtimeCache.has(key)) {
+    const cached = runtimeCache.get(key);
+    if (typeof cached === 'number' && cached > 0) return cached;
+    try { runtimeCache.delete(key); } catch {}
+  }
   try {
     const endpoint = mediaType === 'tv' ? `/tv/${id}` : `/movie/${id}`;
     const details = await fetchTMDBData(endpoint);
     let value = null;
     if (details) {
       if (mediaType === 'tv') {
-        // If it's a tv show then we return the number of episodes instead.
         if (typeof details.number_of_episodes === 'number') value = details.number_of_episodes;
       } else {
         value = details.runtime ?? null;
       }
     }
-    runtimeCache.set(key, value);
+    if (typeof value === 'number' && value > 0) runtimeCache.set(key, value);
     return value;
   } catch (e) {
     console.error('Failed to fetch runtime', e);

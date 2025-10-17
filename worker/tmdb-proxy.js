@@ -10,6 +10,7 @@ class RateLimiter {
     this.capacity = capacity;
     this.refillPerSec = refillPerSec;
     this.buckets = new Map();
+    this.ipCooldowns = new Map();
   }
   _refill(bucket) {
     const now = Date.now() / 1000;
@@ -19,6 +20,10 @@ class RateLimiter {
   }
   allow(key) {
     const now = Date.now() / 1000;
+    const until = this.ipCooldowns.get(key) || 0;
+    if (until > now) {
+      return false;
+    }
     let bucket = this.buckets.get(key);
     if (!bucket) {
       bucket = { tokens: this.capacity, last: now };
@@ -30,6 +35,12 @@ class RateLimiter {
       return true;
     }
     return false;
+  }
+  penalize(key, seconds) {
+    const now = Date.now() / 1000;
+    const current = this.ipCooldowns.get(key) || 0;
+    const next = Math.max(current, now) + Math.max(0.2, Number(seconds) || 1);
+    this.ipCooldowns.set(key, next);
   }
 }
 
@@ -44,7 +55,7 @@ const BAD_USER_AGENTS = [
   /insomnia/i,
 ];
 
-const limiter = new RateLimiter(30, 0.5);
+let limiter = new RateLimiter(80, 20);
 
 export default {
   async fetch(request, env, ctx) {
@@ -121,6 +132,16 @@ export default {
     });
 
     const resp = await fetch(upstreamReq);
+
+    // Adaptive backoff on upstream 429
+    if (resp.status === 429) {
+      let retryAfterSec = 0;
+      try {
+        const ra = resp.headers.get('retry-after');
+        if (ra) retryAfterSec = Number(ra);
+      } catch {}
+      limiter.penalize(ip, retryAfterSec || 1);
+    }
 
     const mergedHeaders = {
       'Content-Type': 'application/json',
