@@ -96,12 +96,9 @@ class PageTransition {
       if (!a) return;
       const href = a.getAttribute('href');
       if (!href) return;
+      
       const isExternal = href.startsWith('http://') || href.startsWith('https://');
-      const isAnchor = href.startsWith('#');
-      const isInternalToken = !href.includes('://') && !href.includes('.') && !href.startsWith('#');
-      const isPrettyOrFile = href.startsWith('/') || href.includes('.html');
-      const isInternal = !isExternal && !isAnchor && (isInternalToken || isPrettyOrFile);
-      if (isInternal) {
+      if (!isExternal) {
         e.preventDefault();
         if (this.isTransitioning) return;
         this.navigateTo(href);
@@ -138,6 +135,7 @@ class PageTransition {
         if (u === '/' || u === '/home' || u === 'home' || u === 'index.html') return 'index.html';
         if (u === '/movies' || u === 'movies') return 'movies.html';
         if (u === '/tv' || u === 'tv') return 'tv.html';
+        if (u === '/my-list' || u === 'my-list') return 'index.html'; // My List doesn't have its own page yet
         if (u.includes('.html')) return u;
         return u;
       };
@@ -162,7 +160,7 @@ class PageTransition {
         try {
           const original = String(url || '');
           if (original === '/tv' || original.endsWith('/tv') || original === 'tv') {
-            pretty = '/tv';
+            pretty = '/movie-night/tv';
           }
         } catch {}
         window.history.pushState(null, '', pretty);
