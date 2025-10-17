@@ -142,9 +142,9 @@ class PageTransition {
         return u;
       };
       const fileToPretty = (u) => {
-        if (u.includes('movies.html')) return '/movies';
-        if (u.includes('index.html')) return '/';
-        if (u.includes('tv.html')) return '/tv';
+        if (u.includes('movies.html')) return '/movie-night/movies';
+        if (u.includes('index.html')) return '/movie-night/';
+        if (u.includes('tv.html')) return '/movie-night/tv';
         return u.startsWith('/') ? u : `/${u}`;
       };
 
