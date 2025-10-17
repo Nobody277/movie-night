@@ -2,7 +2,7 @@
  * This is a helper for movie and tv pages and any future ones that need it.
  */
 
-import { startRuntimeTags, setupRail, getGenreName as getMovieGenreName, populateRail, startMovieCards } from "./ui.js";
+import { startRuntimeTags, setupRail, getGenreName as getMovieGenreName, populateRail, startMovieCards, createMovieCard, createSkeletonCard } from "./ui.js";
 import {getPopularMoviesLast7Days,getAllMovieGenres,discoverMovies,getTopGenres,getAllTVGenres,discoverTV,getTopTVGenres,getTrendingTV} from "./api.js";
 import { formatDate, img } from "./api.js";
 
@@ -114,16 +114,19 @@ function setupGenres(config) {
           return li;
         };
         allGenres.forEach(g => list.appendChild(renderItem(g)));
+        const allLi = document.createElement('li');
+        const allId = 'g-all-match';
+        allLi.innerHTML = `<input class="genre-input" type="checkbox" id="${allId}" data-all-match="true"><label class="genre-label" for="${allId}">Must contain all genres</label>`;
+        list.appendChild(allLi);
         const genreInputs = document.querySelectorAll('.genre-input');
         genreInputs.forEach(input => { input.addEventListener('change', updateGenreCounter); });
       }
     } catch {}
   })();
 
-  // Recursively updates the genre counter.
   function updateGenreCounter() {
     const checkedGenres = document.querySelectorAll('.genre-input:checked');
-    const count = checkedGenres.length;
+    const count = Array.from(checkedGenres).filter((el) => !el.hasAttribute('data-all-match')).length;
     if (genresCounter) {
       if (count > 0) { genresCounter.textContent = ` (${count} selected)`; genresCounter.style.display = ''; }
       else { genresCounter.style.display = 'none'; }
@@ -168,9 +171,12 @@ function resolveFilters() {
     sortBy = 'vote_count.desc';
   }
 
-  const checked = Array.from(document.querySelectorAll('.genre-input:checked'));
-  const selectedGenreIds = checked.map((input) => Number(input.getAttribute('data-genre-id'))).filter((n) => Number.isFinite(n));
-  return { sortBy, startDate, endDate, selectedGenreIds };
+  const checked = Array.from(document.querySelectorAll('.genre-input[data-genre-id]:checked'));
+  const selectedGenreIds = checked
+    .map((input) => Number(input.getAttribute('data-genre-id')))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  const mustContainAll = !!document.querySelector('.genre-input[data-all-match="true"]:checked');
+  return { sortBy, startDate, endDate, selectedGenreIds, mustContainAll };
 }
 
 function createGenreRailSection(genreId, title, fetchFunction) {
@@ -345,6 +351,177 @@ function buildFetcherFactory(config, filters, seenIds) {
   };
 }
 
+async function renderGrid(config, filters) {
+  const container = document.querySelector('.genre-rails');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const grid = document.createElement('div');
+  grid.className = 'movie-grid';
+  container.appendChild(grid);
+
+  const spinnerWrap = document.createElement('div');
+  spinnerWrap.className = 'infinite-spinner';
+  spinnerWrap.innerHTML = '<div class="spinner" aria-hidden="true"></div>';
+  container.appendChild(spinnerWrap);
+
+  const addSkeletons = (count) => {
+    for (let i = 0; i < count; i++) grid.appendChild(createSkeletonCard());
+  };
+  const clearSkeletons = () => {
+    grid.querySelectorAll('.skeleton').forEach((el) => el.remove());
+  };
+
+  addSkeletons(12);
+
+  const normalizeSort = (s, media) => media === 'tv' ? s.replace('primary_release_date', 'first_air_date') : s;
+  const sortBy = normalizeSort(filters.sortBy, config.mediaType);
+  const isAllMatch = !!filters.mustContainAll && Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length >= 1;
+  const clientFilterAll = isAllMatch && Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length >= 2;
+  const strongSignals = isAllMatch
+    ? {}
+    : (filters.sortBy.startsWith('vote_average') ? { voteAverageGte: 6.5, voteCountGte: 100 } : { voteCountGte: 50 });
+  const genreIds = isAllMatch
+    ? filters.selectedGenreIds
+    : (Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length === 1 ? [filters.selectedGenreIds[0]] : []);
+
+  let page = 1;
+  let hasMore = true;
+  let totalPages = Infinity;
+  let loading = false;
+  /** @type {(p:number)=>Record<string,any>} */
+  let activeArgsBuilder = (p) => primaryArgs(p);
+  const seen = new Set();
+
+  const fetchPage = async (args) => {
+    const discoverArgs = Object.assign({}, args, {
+      genreMatchAll: clientFilterAll,
+      genreIdsOr: isAllMatch ? [] : (Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length >= 2 ? filters.selectedGenreIds : [])
+    });
+    const data = await config.discover(discoverArgs);
+    const arr = Array.isArray(data?.results) ? data.results : [];
+    let items = arr.filter((m) => m && m.poster_path);
+    if (clientFilterAll) {
+      const needed = new Set(filters.selectedGenreIds);
+      items = items.filter((m) => Array.isArray(m?.genre_ids) && [...needed].every((gid) => m.genre_ids.includes(gid)));
+    }
+    const tp = Number.isFinite(data?.total_pages) ? Number(data.total_pages) : undefined;
+    return { items, totalPages: tp };
+  };
+
+  const appendCards = (list) => {
+    list.forEach((movie) => {
+      if (movie && !seen.has(movie.id)) {
+        seen.add(movie.id);
+        const card = createMovieCard(movie);
+        grid.appendChild(card);
+      }
+    });
+  };
+
+  const primaryArgs = (p) => ({ sortBy, startDate: filters.startDate, endDate: filters.endDate, genreIds, page: p, ...strongSignals });
+  const popularityWindowArgs = (p) => ({ sortBy: 'popularity.desc', startDate: filters.startDate, endDate: filters.endDate, genreIds, page: p, voteCountGte: isAllMatch ? undefined : 20 });
+  const voteCountAllTimeArgs = (p) => ({ sortBy: 'vote_count.desc', genreIds, page: p, voteCountGte: 50 });
+  const popularityAllTimeArgs = (p) => ({ sortBy: 'popularity.desc', genreIds, page: p });
+
+  const loadNextPage = async () => {
+    if (!hasMore || loading) return;
+    loading = true;
+    try { spinnerWrap.style.display = ''; } catch {}
+    try {
+      if (page === 1) {
+        const { items, totalPages: tp } = await fetchPage(primaryArgs(1));
+        if (items.length > 0) {
+          if (tp) totalPages = tp;
+          clearSkeletons();
+          appendCards(items);
+          startMovieCards();
+          startRuntimeTags();
+          activeArgsBuilder = (p) => primaryArgs(p);
+          page = 2;
+        } else {
+          const popRes = await fetchPage(popularityWindowArgs(1));
+          if (popRes.items.length > 0) {
+            if (popRes.totalPages) totalPages = popRes.totalPages;
+            clearSkeletons();
+            appendCards(popRes.items);
+            startMovieCards();
+            startRuntimeTags();
+            activeArgsBuilder = (p) => popularityWindowArgs(p);
+            page = 2;
+          } else {
+            const vcRes = await fetchPage(voteCountAllTimeArgs(1));
+            if (vcRes.items.length > 0) {
+              if (vcRes.totalPages) totalPages = vcRes.totalPages;
+              clearSkeletons();
+              appendCards(vcRes.items);
+              startMovieCards();
+              startRuntimeTags();
+              activeArgsBuilder = (p) => voteCountAllTimeArgs(p);
+              page = 2;
+            } else {
+              // Last-resort fallback: all-time popularity with no vote thresholds
+              const popAll = await fetchPage(popularityAllTimeArgs(1));
+              if (popAll.items.length > 0) {
+                clearSkeletons();
+                appendCards(popAll.items);
+                startMovieCards();
+                startRuntimeTags();
+                activeArgsBuilder = (p) => popularityAllTimeArgs(p);
+                page = 2;
+                totalPages = popAll.totalPages ?? totalPages;
+              } else {
+              hasMore = false;
+              clearSkeletons();
+                // Empty state messaging
+                const empty = document.createElement('div');
+                empty.style.padding = '16px 0';
+                empty.style.color = 'var(--muted)';
+                empty.textContent = 'No results match all selected genres. Try removing a genre or unchecking "Must contain all genres".';
+                container.insertBefore(empty, spinnerWrap);
+              }
+            }
+          }
+        }
+      } else {
+        const { items } = await fetchPage(activeArgsBuilder(page));
+        if (items.length === 0) {
+          hasMore = false;
+        } else {
+          appendCards(items);
+          startMovieCards();
+          startRuntimeTags();
+          page += 1;
+        }
+      }
+      if (Number.isFinite(totalPages)) {
+        hasMore = page <= totalPages;
+      }
+    } catch (e) {
+      console.error('Failed to load grid page', e);
+      hasMore = false;
+      clearSkeletons();
+    } finally {
+      loading = false;
+      try { spinnerWrap.style.display = hasMore ? '' : 'none'; } catch {}
+    }
+  };
+
+  await loadNextPage();
+
+  const sentinel = document.createElement('div');
+  sentinel.style.height = '1px';
+  sentinel.style.width = '100%';
+  container.appendChild(sentinel);
+  const io = new IntersectionObserver(async (entries) => {
+    if (entries.some((e) => e.isIntersecting)) {
+      await loadNextPage();
+      if (!hasMore) io.disconnect();
+    }
+  }, { rootMargin: '1400px 0px' });
+  io.observe(sentinel);
+}
+
 async function renderRails(config, filters) {
   const railsContainer = document.querySelector('.genre-rails');
   if (!railsContainer) return;
@@ -424,7 +601,13 @@ export async function startCatalogPage(config) {
   const refresh = async () => {
     const filters = resolveFilters();
     await startFeaturedHero(config, Object.assign({}, filters));
-    await renderRails(config, Object.assign({}, filters));
+    const selectedCount = Array.isArray(filters.selectedGenreIds) ? filters.selectedGenreIds.length : 0;
+    const useGrid = !!filters.mustContainAll || selectedCount <= 1;
+    if (useGrid) {
+      await renderGrid(config, Object.assign({}, filters));
+    } else {
+      await renderRails(config, Object.assign({}, filters));
+    }
   };
   setupControls(() => { refresh(); });
   setupGenres(config);

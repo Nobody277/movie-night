@@ -235,12 +235,14 @@ function setCommonDiscoverParams(qp, { sortBy, startDate, endDate, genreIds, pag
  * @returns {Promise<any|null>}
  */
 export async function discoverMovies(params = {}) {
-  const { sortBy = 'popularity.desc', startDate = null, endDate = null, genreIds = [], page = 1, voteCountGte, voteAverageGte } = params;
+  const { sortBy = 'popularity.desc', startDate = null, endDate = null, genreIds = [], page = 1, voteCountGte, voteAverageGte, genreMatchAll = false, genreIdsOr = [] } = params;
 
   const qp = new URLSearchParams();
   setCommonDiscoverParams(qp, { sortBy, startDate, endDate, genreIds, page, voteCountGte, voteAverageGte });
   if (startDate) qp.set('primary_release_date.gte', startDate);
   if (endDate) qp.set('primary_release_date.lte', endDate);
+  if (genreMatchAll && Array.isArray(genreIds) && genreIds.length > 1) qp.set('with_genres', genreIds.join(','));
+  if (Array.isArray(genreIdsOr) && genreIdsOr.length > 1) qp.set('with_genres', genreIdsOr.join('|'));
   return await fetchTMDBData(`/discover/movie?${qp.toString()}`);
 }
 
@@ -256,12 +258,14 @@ export async function discoverMovies(params = {}) {
  * @returns {Promise<any|null>}
  */
 export async function discoverTV(params = {}) {
-  const { sortBy = 'popularity.desc', startDate = null, endDate = null, genreIds = [], page = 1, voteCountGte, voteAverageGte } = params;
+  const { sortBy = 'popularity.desc', startDate = null, endDate = null, genreIds = [], page = 1, voteCountGte, voteAverageGte, genreMatchAll = false, genreIdsOr = [] } = params;
 
   const qp = new URLSearchParams();
   setCommonDiscoverParams(qp, { sortBy, startDate, endDate, genreIds, page, voteCountGte, voteAverageGte });
   if (startDate) qp.set('first_air_date.gte', startDate);
   if (endDate) qp.set('first_air_date.lte', endDate);
+  if (genreMatchAll && Array.isArray(genreIds) && genreIds.length > 1) qp.set('with_genres', genreIds.join(','));
+  if (Array.isArray(genreIdsOr) && genreIdsOr.length > 1) qp.set('with_genres', genreIdsOr.join('|'));
   return await fetchTMDBData(`/discover/tv?${qp.toString()}`);
 }
 

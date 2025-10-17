@@ -163,7 +163,17 @@ export function ensureRuntimeObserver() {
       const id = el.getAttribute('data-id');
       const type = el.getAttribute('data-type') || 'movie';
       if (!id) return;
-      getTitleRuntime(id, type).then((val) => {
+      const attemptFetch = async () => {
+        let val = await getTitleRuntime(id, type);
+        if (val == null || Number(val) <= 0) {
+          try {
+            await new Promise((r) => setTimeout(r, 250 + Math.floor(Math.random() * 250)));
+            val = await getTitleRuntime(id, type);
+          } catch {}
+        }
+        return val;
+      };
+      attemptFetch().then((val) => {
         const inSearchItem = !!el.closest('.search-item');
         if (inSearchItem && (!val || val <= 0)) {
           const item = el.closest('.search-item');
