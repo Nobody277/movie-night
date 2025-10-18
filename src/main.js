@@ -1,7 +1,7 @@
 import "./style.css";
 import { startBackground, destroyBackground } from "./background.js";
 import { fetchTMDBData, img } from "./api.js";
-import { startRuntimeTags, getGenreName, setupRail, startMovieCards, disposeUI } from "./ui.js";
+import { startRuntimeTags, getGenreName, setupRail, startMovieCards, disposeUI, createMovieCard } from "./ui.js";
 import { startHomePage } from "./home.js";
 import { startMoviesPage } from "./movies.js";
 import { startTVPage } from "./tv.js";
@@ -17,7 +17,7 @@ if (typeof document !== 'undefined') {
 
 function updateSiteIcons() {
   try {
-    const faviconUrl = new URL('../movienight.svg', import.meta.url).href;
+    const faviconUrl = './movienight.svg';
 
     let link = document.querySelector('link[rel="icon"]');
     if (!link) {
@@ -135,6 +135,7 @@ class PageTransition {
         if (u === '/' || u === '/home' || u === 'home' || u === 'index.html') return 'index.html';
         if (u === '/movies' || u === 'movies') return 'movies.html';
         if (u === '/tv' || u === 'tv') return 'tv.html';
+        if (u === '/search' || u === 'search' || u.startsWith('/search?') || u.startsWith('search?')) return 'search.html' + (u.includes('?') ? u.slice(u.indexOf('?')) : '');
         if (u === '/my-list' || u === 'my-list') return 'index.html'; // My List doesn't have its own page yet
         if (u.includes('.html')) return u;
         return u;
@@ -143,6 +144,7 @@ class PageTransition {
         if (u.includes('movies.html')) return '/movie-night/movies';
         if (u.includes('index.html')) return '/movie-night/';
         if (u.includes('tv.html')) return '/movie-night/tv';
+        if (u.includes('search.html')) return '/movie-night/search' + (u.includes('?') ? u.slice(u.indexOf('?')) : '');
         return u.startsWith('/') ? u : `/${u}`;
       };
 
@@ -161,6 +163,8 @@ class PageTransition {
           const original = String(url || '');
           if (original === '/tv' || original.endsWith('/tv') || original === 'tv') {
             pretty = '/movie-night/tv';
+          } else if (original === '/search' || original.endsWith('/search') || original === 'search' || original.startsWith('/search?')) {
+            pretty = original.startsWith('/search?') ? `/movie-night${original}` : '/movie-night/search';
           }
         } catch {}
         window.history.pushState(null, '', pretty);
@@ -255,6 +259,8 @@ class PageTransition {
           placeholder.placeholder = 'Search TV shows, movies...';
         }
       } catch {}
+    } else if (path.includes('/search')) {
+      startSearchPage();
     }
     startMovieCards();
     document.querySelectorAll('.rail').forEach(setupRail);
@@ -438,6 +444,21 @@ function startSearchFunctionality() {
     searchInput.setAttribute('aria-controls', resultsEl.id);
     resultsEl.setAttribute('role', 'listbox');
     searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        if (resultsEl.classList.contains('open') && activeIndex >= 0) {
+          e.preventDefault();
+          selectItem(activeIndex);
+        } else {
+          const query = searchInput.value.trim();
+          if (query) {
+            e.preventDefault();
+            searchBox.classList.remove('active');
+            searchToggle.setAttribute('aria-expanded', 'false');
+            pageTransition.navigateTo(`/search?q=${encodeURIComponent(query)}`);
+          }
+        }
+        return;
+      }
       if (!resultsEl.classList.contains('open')) return;
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -449,11 +470,6 @@ function startSearchFunctionality() {
         setActive(Math.max(-1, activeIndex - 1));
         const el = resultsEl.querySelectorAll('.search-item')[Math.max(0, activeIndex)];
         if (el) searchInput.setAttribute('aria-activedescendant', el.id || '');
-      } else if (e.key === 'Enter') {
-        if (activeIndex >= 0) {
-          e.preventDefault();
-          selectItem(activeIndex);
-        }
       } else if (e.key === 'Escape') {
         closeSearchResults();
       }
@@ -463,4 +479,42 @@ function startSearchFunctionality() {
 
 if (window.p5) {
   pageTransition.reinitializeP5Animation();
+}
+
+function startSearchPage() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const query = urlParams.get('q');
+  if (query) performSearch(query);
+}
+
+async function performSearch(query) {
+  const grid = document.getElementById('search-results-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const skeletonCount = Math.min(12, Math.max(6, Math.floor((grid.clientWidth || 800) / 190)));
+  for (let i = 0; i < skeletonCount; i++) {
+    const skel = document.createElement('article');
+    skel.className = 'movie-card skeleton';
+    skel.innerHTML = '<div class="poster-skeleton shimmer"></div><div class="movie-info"><div class="line-skeleton short shimmer"></div><div class="line-skeleton long shimmer"></div></div><div class="movie-overlay"></div>';
+    grid.appendChild(skel);
+  }
+  try {
+    const data = await fetchTMDBData(`/search/multi?query=${encodeURIComponent(query)}&include_adult=false`);
+    let results = Array.isArray(data?.results) ? data.results : [];
+    results = results.filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !!r.poster_path);
+    grid.innerHTML = '';
+    if (results.length === 0) {
+      grid.innerHTML = '<div class="no-results">No results found.</div>';
+      return;
+    }
+    results.forEach(movie => {
+      const card = createMovieCard(movie);
+      grid.appendChild(card);
+    });
+    startMovieCards();
+    startRuntimeTags();
+  } catch (error) {
+    console.error('Search failed:', error);
+    grid.innerHTML = '<div class="error">Search failed. Please try again.</div>';
+  }
 }

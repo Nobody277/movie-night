@@ -44,6 +44,12 @@ body {
   transition: opacity 300ms ease-in-out;
 }
 
+.page-container:focus { outline: none; }
+.page-container:focus-visible { outline: none; }
+
+main:focus { outline: none; }
+main:focus-visible { outline: none; }
+
 .page-container.page-transitioning {
   opacity: 0;
 }
