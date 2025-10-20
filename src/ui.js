@@ -344,6 +344,22 @@ export function startMovieCards() {
       titleElement.addEventListener('mouseenter', showTitleTooltip);
       titleElement.addEventListener('mouseleave', hideTitleTooltip);
     }
+
+    const id = card.getAttribute('data-id');
+    const type = card.getAttribute('data-type') || 'movie';
+    if (id && (type === 'movie' || type === 'tv')) {
+      card.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target && (target.closest('.card-add') || target.closest('.movie-overlay'))) return;
+        const path = type === 'tv' ? `/tv/tv:${id}` : `/movies/movie:${id}`;
+        try {
+          if (window.pageTransition) window.pageTransition.navigateTo(path);
+          else window.location.href = path;
+        } catch {
+          try { window.location.href = path; } catch {}
+        }
+      });
+    }
   });
 }
 

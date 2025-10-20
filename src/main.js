@@ -132,17 +132,23 @@ class PageTransition {
 
       const prettyToFile = (u) => {
         if (!u) return 'index.html';
-        if (u === '/' || u === '/home' || u === 'home' || u === 'index.html') return 'index.html';
-        if (u === '/movies' || u === 'movies') return 'movies.html';
-        if (u === '/tv' || u === 'tv') return 'tv.html';
-        if (u === '/search' || u === 'search' || u.startsWith('/search?') || u.startsWith('search?')) return 'search.html' + (u.includes('?') ? u.slice(u.indexOf('?')) : '');
-        if (u === '/my-list' || u === 'my-list') return 'index.html'; // My List doesn't have its own page yet
+        let p = String(u || '');
+        if (p.startsWith('/movie-night')) p = p.slice('/movie-night'.length);
+        if (!p.startsWith('/')) p = '/' + p;
+        if (p === '/' || p === '/home' || p === 'home' || p === '/index.html' || p === 'index.html') return 'index.html';
+        if (p === '/movies' || p === 'movies') return 'movies.html';
+        if (p.startsWith('/movies/movie:')) return 'details.html';
+        if (p.startsWith('/tv/tv:')) return 'details.html';
+        if (p === '/tv' || p === 'tv') return 'tv.html';
+        if (p === '/search' || p === 'search' || p.startsWith('/search?') || p.startsWith('search?')) return 'search.html' + (p.includes('?') ? p.slice(p.indexOf('?')) : '');
+        if (p === '/my-list' || p === 'my-list') return 'index.html';
         if (u.includes('.html')) return u;
         return u;
       };
       const fileToPretty = (u) => {
         if (u.includes('movies.html')) return '/movie-night/movies';
         if (u.includes('index.html')) return '/movie-night/';
+        if (u.includes('details.html')) return window.location.pathname || '/movie-night/movies';
         if (u.includes('tv.html')) return '/movie-night/tv';
         if (u.includes('search.html')) return '/movie-night/search' + (u.includes('?') ? u.slice(u.indexOf('?')) : '');
         return u.startsWith('/') ? u : `/${u}`;
@@ -163,6 +169,12 @@ class PageTransition {
           const original = String(url || '');
           if (original === '/tv' || original.endsWith('/tv') || original === 'tv') {
             pretty = '/movie-night/tv';
+          } else if (original.startsWith('/movies/movie:') || original.startsWith('movies/movie:') || original.startsWith('/movie-night/movies/movie:')) {
+            const prefixed = original.startsWith('/movie-night') ? original.slice('/movie-night'.length) : (original.startsWith('/') ? original : `/${original}`);
+            pretty = `/movie-night${prefixed}`;
+          } else if (original.startsWith('/tv/tv:') || original.startsWith('tv/tv:') || original.startsWith('/movie-night/tv/tv:')) {
+            const prefixed = original.startsWith('/movie-night') ? original.slice('/movie-night'.length) : (original.startsWith('/') ? original : `/${original}`);
+            pretty = `/movie-night${prefixed}`;
           } else if (original === '/search' || original.endsWith('/search') || original === 'search' || original.startsWith('/search?')) {
             pretty = original.startsWith('/search?') ? `/movie-night${original}` : '/movie-night/search';
           }
@@ -237,7 +249,9 @@ class PageTransition {
     } catch {}
     startHomePage();
     const path = window.location.pathname;
-    if (path.includes('/movies')) {
+    if (path.includes('/movies/movie:') || path.includes('/tv/tv:')) {
+      import('./details.js').then(m => m.startDetailsPage && m.startDetailsPage());
+    } else if (path.includes('/movies')) {
       startMoviesPage();
     } else if (path.includes('/tv')) {
       startTVPage();
@@ -282,7 +296,21 @@ class PageTransition {
 }
 
 const pageTransition = new PageTransition();
-pageTransition.reinitializePageFeatures();
+try { window.pageTransition = pageTransition; } catch {}
+
+(function handleInitialPrettyRoute() {
+  try {
+    let path = window.location.pathname || '';
+    if (path.startsWith('/movie-night')) path = path.slice('/movie-night'.length) || '/';
+    if (path.startsWith('//')) path = path.slice(1);
+    if (!path.startsWith('/')) path = '/' + path;
+    if (path.includes('/movies/movie:') || path.includes('/tv/tv:')) {
+      pageTransition.navigateTo(`/movie-night${path}`, false);
+      return;
+    }
+  } catch {}
+  pageTransition.reinitializePageFeatures();
+})();
 
 function startSearchFunctionality() {
   const searchToggle = document.querySelector('.search-toggle');
@@ -399,7 +427,7 @@ function startSearchFunctionality() {
       searchBox.classList.remove('active');
       searchToggle.setAttribute('aria-expanded', 'false');
       const mediaType = item.media_type === 'tv' ? 'tv' : 'movie';
-      const dest = mediaType === 'tv' ? `/tv?selected=${mediaType}:${item.id}` : `/movies?selected=${mediaType}:${item.id}`;
+      const dest = mediaType === 'tv' ? `/tv/tv:${item.id}` : `/movies/movie:${item.id}`;
       pageTransition.navigateTo(dest);
     };
 

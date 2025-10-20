@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="./movienight.svg?v=1" />
+    <link rel="shortcut icon" href="./movienight.svg?v=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <meta name="description" content="Title details">
+    <meta name="theme-color" content="#151923">
+    <meta property="og:title" content="Movie Night - Details">
+    <meta property="og:description" content="Title details on Movie Night">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="./movienight.svg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Movie Night - Details">
+    <meta name="twitter:description" content="Title details on Movie Night">
+    <meta name="twitter:image" content="./movienight.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Movie Night - Details</title>
+    <base href="/movie-night/">
+    <style>
+      html {
+        background: #0f1115
+      }
+
+      body {
+        margin: 0;
+        background: #0f1115;
+        color: #e6e6e6
+      }
+
+      body.no-fouc {
+        visibility: hidden
+      }
+    </style>
+  </head>
+  <body class="no-fouc">
+    <header class="site-header">
+      <div class="container">
+        <div class="header-row">
+          <h1 class="logo"><a href="home">Movie Night</a></h1>
+          <nav class="main-nav" aria-label="Primary">
+            <ul class="nav-list">
+              <li><a class="nav-link" href="home">Home</a></li>
+              <li><a class="nav-link" href="movies">Movies</a></li>
+              <li><a class="nav-link" href="tv">TV Shows</a></li>
+              <li><a class="nav-link" href="my-list">My List</a></li>
+              <li>
+                <div class="search-container"><button class="search-toggle" aria-label="Search" aria-expanded="false" aria-controls="site-search"><svg class="search-icon" width="20" height="20" viewBox="0 0 640 640" fill="currentColor">
+                      <path d="M480 272C480 317.9 465.1 360.3 440 394.7L566.6 521.4C579.1 533.9 579.1 554.2 566.6 566.7C554.1 579.2 533.8 579.2 521.3 566.7L394.7 440C360.3 465.1 317.9 480 272 480C157.1 480 64 386.9 64 272C64 157.1 157.1 64 272 64C386.9 64 480 157.1 480 272zM272 416C351.5 416 416 351.5 416 272C416 192.5 351.5 128 272 128C192.5 128 128 192.5 128 272C128 351.5 192.5 416 272 416z" />
+                    </svg></button>
+                  <div class="search-box" id="site-search"><label class="sr-only" for="search-input">Search</label><input id="search-input" type="text" placeholder="Search movies, TV shows..." class="search-input"></div>
+                </div>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </header>
+    <main class="container">
+      <section class="section featured-hero" id="details-hero" aria-label="Title details hero"></section>
+      <section class="section" id="details-body"></section>
+    </main>
+    <div aria-hidden="true" style="height: 40px"></div>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.10.0/lib/p5.min.js"></script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
