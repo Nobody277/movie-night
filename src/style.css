@@ -806,8 +806,8 @@ canvas.p5Canvas {
   position: absolute;
   inset: 0;
   background-size: cover;
-  background-position: center;
-  filter: brightness(0.9) saturate(110%);
+  background-position: center top 20%;
+  filter: brightness(0.9) saturate(120%);
   transform: scale(1);
   will-change: transform, opacity;
   opacity: 0;
