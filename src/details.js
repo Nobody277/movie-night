@@ -1,4 +1,4 @@
-import { fetchTMDBData, img } from "./api.js";
+import { fetchTMDBData, img, bestBackdropForSize } from "./api.js";
 
 function parseTypeAndId() {
   try {
@@ -80,6 +80,7 @@ export async function startDetailsPage() {
     const year = formatYear(details.release_date || details.first_air_date);
     const rating = typeof details.vote_average === "number" ? details.vote_average.toFixed(1) : null;
     let backdropUrl = "";
+    const heroWidth = (() => { try { return (document.getElementById("details-hero") || document.querySelector(".featured-hero")).clientWidth || window.innerWidth || 1280; } catch { return 1280; } })();
     try {
       const images = await fetchTitleImages(type, id);
       const backs = Array.isArray(images?.backdrops) ? images.backdrops : [];
@@ -91,7 +92,7 @@ export async function startDetailsPage() {
       const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
       if (backs.length) {
         const b = pick(prefer(backs));
-        if (b && b.file_path) backdropUrl = (b.width && b.width >= 1920) ? img.backdrop(b.file_path) : img.backdrop(b.file_path);
+        if (b && b.file_path) backdropUrl = bestBackdropForSize(b.file_path, heroWidth);
       }
       if (!backdropUrl && posters.length) {
         const p = pick(prefer(posters));
@@ -99,7 +100,7 @@ export async function startDetailsPage() {
       }
     } catch {}
     if (!backdropUrl) {
-      backdropUrl = details.backdrop_path ? img.backdrop(details.backdrop_path)
+      backdropUrl = details.backdrop_path ? bestBackdropForSize(details.backdrop_path, heroWidth)
         : (details.poster_path ? img.poster(details.poster_path) : "");
     }
     const runtimeOrEps = formatRuntimeOrEpisodes(details, type);
@@ -151,9 +152,25 @@ export async function startDetailsPage() {
       if (trailerBtn) {
         if (trailerUrl) {
           try { trailerBtn.removeAttribute('disabled'); } catch {}
-          trailerBtn.addEventListener('click', () => {
+          
+          trailerBtn.addEventListener('click', (e) => {
+            if (e && (e.ctrlKey || e.metaKey)) {
+              try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
+              return;
+            }
             try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
           }, { once: true });
+          
+          trailerBtn.addEventListener('mousedown', (e) => {
+            if (e && e.button === 1) {
+              try { e.preventDefault(); } catch {}
+            }
+          });
+          
+          trailerBtn.addEventListener('auxclick', (e) => {
+            if (!e || e.button !== 1) return;
+            try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
+          });
         } else {
           try { trailerBtn.setAttribute('disabled', 'true'); } catch {}
         }

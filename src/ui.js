@@ -399,12 +399,34 @@ export function startMovieCards() {
         const target = e.target;
         if (target && (target.closest('.card-add') || target.closest('.movie-overlay'))) return;
         const path = type === 'tv' ? `/tv/tv:${id}` : `/movies/movie:${id}`;
+        if (e && (e.ctrlKey || e.metaKey)) {
+          const pretty = path.startsWith('/movie-night') ? path : `/movie-night${path}`;
+          try { window.open(pretty, '_blank', 'noopener,noreferrer'); } catch {}
+          return;
+        }
         try {
           if (window.pageTransition) window.pageTransition.navigateTo(path);
           else window.location.href = path;
         } catch {
           try { window.location.href = path; } catch {}
         }
+      });
+
+      card.addEventListener('mousedown', (e) => {
+        if (e && e.button === 1) {
+          const target = e.target;
+          if (target && (target.closest('.card-add') || target.closest('.movie-overlay'))) return;
+          try { e.preventDefault(); } catch {}
+        }
+      });
+
+      card.addEventListener('auxclick', (e) => {
+        if (!e || e.button !== 1) return;
+        const target = e.target;
+        if (target && (target.closest('.card-add') || target.closest('.movie-overlay'))) return;
+        const path = type === 'tv' ? `/tv/tv:${id}` : `/movies/movie:${id}`;
+        const pretty = path.startsWith('/movie-night') ? path : `/movie-night${path}`;
+        try { window.open(pretty, '_blank', 'noopener,noreferrer'); } catch {}
       });
     }
   });

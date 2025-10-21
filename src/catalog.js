@@ -3,11 +3,43 @@
  */
 
 import { startRuntimeTags, setupRail, getGenreName as getMovieGenreName, populateRail, startMovieCards, createMovieCard, createSkeletonCard } from "./ui.js";
-import {getPopularMoviesLast7Days,getAllMovieGenres,discoverMovies,getTopGenres,getAllTVGenres,discoverTV,getTopTVGenres,getTrendingTV, getTitleImages} from "./api.js";
+import {getPopularMoviesLast7Days,getAllMovieGenres,discoverMovies,getTopGenres,getAllTVGenres,discoverTV,getTopTVGenres,getTrendingTV, getTitleImages, fetchTMDBData} from "./api.js";
 import { formatDate, img } from "./api.js";
 
 function defaultGetGenreName(id, media) {
   return getMovieGenreName(id) || '';
+}
+
+async function fetchTrailerUrl(type, id) {
+  try {
+    const data = await fetchTMDBData(`/${type}/${id}/videos`, { ttlMs: 10 * 60 * 1000, maxRetries: 2 });
+    const list = Array.isArray(data?.results) ? data.results : [];
+    const youtube = list.filter(v => v && v.site === 'YouTube' && v.key);
+    if (youtube.length === 0) return null;
+    const typeOf = (v) => (v.type || '').toLowerCase();
+    const bucket = (t) => youtube.filter(v => typeOf(v) === t);
+    const pickBest = (arr) => {
+      if (!arr.length) return null;
+      const preferEn = arr.filter(v => (v.iso_639_1 || '').toLowerCase() === 'en');
+      const candidates = preferEn.length ? preferEn : arr;
+      candidates.sort((a, b) => {
+        const officialCmp = (b.official ? 1 : 0) - (a.official ? 1 : 0);
+        if (officialCmp !== 0) return officialCmp;
+        const resCmp = (b.size || 0) - (a.size || 0);
+        if (resCmp !== 0) return resCmp;
+        const timeCmp = (b.published_at ? Date.parse(b.published_at) : 0) - (a.published_at ? Date.parse(a.published_at) : 0);
+        return timeCmp;
+      });
+      return candidates[0] || null;
+    };
+    const order = ['trailer', 'teaser', 'clip'];
+    let best = null;
+    for (const t of order) { best = pickBest(bucket(t)); if (best) break; }
+    if (!best) best = pickBest(youtube);
+    return best && best.key ? `https://www.youtube.com/watch?v=${best.key}` : null;
+  } catch {
+    return null;
+  }
 }
 
 // Dropdowns for sorting and time. Needed for all pages.
@@ -360,9 +392,38 @@ async function startFeaturedHero(config, filters) {
           </div>
           <div class=\"featured-cta\">
             <button class=\"btn watch-now\" type=\"button\">Watch Now</button>
-            <button class=\"btn learn-more\" type=\"button\">Learn More</button>
+            <button class=\"btn watch-trailer\" type=\"button\">Watch Trailer</button>
           </div>`;
         contentEl.classList.add('slide-enter');
+        
+        const trailerBtn = contentEl.querySelector('.watch-trailer');
+        if (trailerBtn) {
+          const trailerUrl = await fetchTrailerUrl(mediaType, item.id);
+          if (trailerUrl) {
+            trailerBtn.removeAttribute('disabled');
+            
+            trailerBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
+            });
+            
+            trailerBtn.addEventListener('mousedown', (e) => {
+              if (e && e.button === 1) {
+                try { e.preventDefault(); } catch {}
+              }
+            });
+            
+            trailerBtn.addEventListener('auxclick', (e) => {
+              if (!e || e.button !== 1) return;
+              e.preventDefault();
+              e.stopPropagation();
+              try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
+            });
+          } else {
+            trailerBtn.setAttribute('disabled', 'true');
+          }
+        }
       }
       startRuntimeTags();
       hero.classList.add('ready');

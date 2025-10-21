@@ -312,9 +312,14 @@ try { window.pageTransition = pageTransition; } catch {}
     if (path.startsWith('/movie-night')) path = path.slice('/movie-night'.length) || '/';
     if (path.startsWith('//')) path = path.slice(1);
     if (!path.startsWith('/')) path = '/' + path;
-    if (path.includes('/movies/movie:') || path.includes('/tv/tv:')) {
-      pageTransition.navigateTo(`/movie-night${path}`, false);
-      return;
+    const shouldPretty = path === '/' || path === '/home' || path === '/index.html' || path === '/movies' || path === '/tv' || path.startsWith('/movies/movie:') || path.startsWith('/tv/tv:') || path.startsWith('/search');
+    if (shouldPretty) {
+      const pretty = `/movie-night${path}`;
+      try { window.history.replaceState(null, '', pretty); } catch {}
+      if (path.startsWith('/movies/movie:') || path.startsWith('/tv/tv:')) {
+        pageTransition.navigateTo(pretty, false);
+        return;
+      }
     }
   } catch {}
   pageTransition.reinitializePageFeatures();

@@ -5,6 +5,7 @@
 export const TMDB_BASE_URL = 'https://tmdb-proxy.movie-night.workers.dev';
 export const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500'; // Poster / movie-card
 export const TMDB_BACKDROP_BASE_URL = 'https://image.tmdb.org/t/p/w1280'; // Big Poster / featured-hero
+export const TMDB_BACKDROP_W780_BASE_URL = 'https://image.tmdb.org/t/p/w780'; // Smaller hero for narrow screens
 export const TMDB_BACKDROP_ORIGINAL_BASE_URL = 'https://image.tmdb.org/t/p/original'; // Highest res for hero zoom
 const runtimeCache = new Map(); // Saving movies/tv runtime so we don't have to fetch it again
 const inflightRequests = new Map(); // In-flight request deduplication so we don't make duplicate requests
@@ -280,6 +281,31 @@ export const img = {
   backdrop: (path) => path ? `${TMDB_BACKDROP_BASE_URL}${path}` : '',
   backdropHi: (path) => path ? `${TMDB_BACKDROP_ORIGINAL_BASE_URL}${path}` : ''
 };
+
+/**
+ * Picks the most appropriate TMDB backdrop URL based on container width and device pixel ratio.
+ * This keeps the hero sharp without fetching unnecessarily large images.
+ * @param {string} filePath - TMDB file_path (e.g. "/abc.jpg")
+ * @param {number} containerCssWidth - The hero container CSS width in pixels
+ * @param {number} [devicePixelRatio=window.devicePixelRatio||1]
+ * @returns {string}
+ */
+export function bestBackdropForSize(filePath, containerCssWidth, devicePixelRatio = (typeof window !== 'undefined' && window.devicePixelRatio) ? window.devicePixelRatio : 1) {
+  if (!filePath) return '';
+  const target = Math.max(1, Math.floor(containerCssWidth * Math.min(3, Math.max(1, devicePixelRatio))));
+  // Available widths of interest: 780, 1280, original (~3840+)
+  const diff780 = Math.abs(780 - target);
+  const diff1280 = Math.abs(1280 - target);
+  // Prefer the smallest size that is >= target, with a small bias toward larger to avoid upscaling
+  if (target <= 780) {
+    return `${TMDB_BACKDROP_W780_BASE_URL}${filePath}`;
+  }
+  if (target <= 1280) {
+    return `${TMDB_BACKDROP_BASE_URL}${filePath}`;
+  }
+  // Very large or retina wide screens → original
+  return `${TMDB_BACKDROP_ORIGINAL_BASE_URL}${filePath}`;
+}
 
 /**
  * Fetch images (backdrops/posters) for a title.
