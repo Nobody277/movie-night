@@ -219,6 +219,14 @@ class PageTransition {
       if (name && preserve.has(name)) return;
       document.head.appendChild(meta.cloneNode(true));
     });
+
+    try {
+      const providerGroup = document.getElementById('provider-meta-group');
+      if (providerGroup) providerGroup.remove();
+      const group = document.createElement('div');
+      group.id = 'provider-meta-group';
+      document.head.appendChild(group);
+    } catch {}
     
     const newContainer = document.createElement('div');
     newContainer.className = 'page-container';

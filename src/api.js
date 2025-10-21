@@ -5,6 +5,7 @@
 export const TMDB_BASE_URL = 'https://tmdb-proxy.movie-night.workers.dev';
 export const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500'; // Poster / movie-card
 export const TMDB_BACKDROP_BASE_URL = 'https://image.tmdb.org/t/p/w1280'; // Big Poster / featured-hero
+export const TMDB_BACKDROP_ORIGINAL_BASE_URL = 'https://image.tmdb.org/t/p/original'; // Highest res for hero zoom
 const runtimeCache = new Map(); // Saving movies/tv runtime so we don't have to fetch it again
 const inflightRequests = new Map(); // In-flight request deduplication so we don't make duplicate requests
 const responseCache = new Map(); // Simple response cache with TTL + LRU eviction
@@ -61,9 +62,14 @@ export async function fetchTMDBData(endpoint, opts = {}) {
     let attempt = 0;
     while (attempt <= maxRetries) {
       try {
-        const fetchOpts = { headers: { 'Content-Type': 'application/json' } };
+        const fetchOpts = { headers: { 'Content-Type': 'application/json' }, cache: 'no-store' };
         if (signal) fetchOpts.signal = signal;
-        const res = await fetch(`${TMDB_BASE_URL}${endpoint}`, fetchOpts); // Example: https://tmdb-proxy.movie-night.workers.dev/trending/movie/week
+        const bust = attempt > 0 ? `${endpoint.includes('?') ? '&' : '?'}__bust=${Date.now()}` : '';
+        const url = `${TMDB_BASE_URL}${endpoint}${bust}`; // Example: https://tmdb-proxy.movie-night.workers.dev/trending/movie/week
+        const res = await fetch(url, fetchOpts);
+        if (res.status === 204) {
+          return null;
+        }
         if (res.ok) {
           const data = await res.json();
           responseCache.set(cacheKey, { data, expiresAt: Date.now() + ttlMs });
@@ -271,8 +277,24 @@ export async function discoverTV(params = {}) {
 
 export const img = {
   poster: (path) => path ? `${TMDB_IMAGE_BASE_URL}${path}` : '',
-  backdrop: (path) => path ? `${TMDB_BACKDROP_BASE_URL}${path}` : ''
+  backdrop: (path) => path ? `${TMDB_BACKDROP_BASE_URL}${path}` : '',
+  backdropHi: (path) => path ? `${TMDB_BACKDROP_ORIGINAL_BASE_URL}${path}` : ''
 };
+
+/**
+ * Fetch images (backdrops/posters) for a title.
+ * @param {number|string} id
+ * @param {('movie'|'tv')} [mediaType='movie']
+ * @returns {Promise<any|null>}
+ */
+export async function getTitleImages(id, mediaType = 'movie') {
+  try {
+    const endpoint = mediaType === 'tv' ? `/tv/${id}/images` : `/movie/${id}/images`;
+    return await fetchTMDBData(endpoint, { ttlMs: 24 * 60 * 60 * 1000, maxRetries: 2 });
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Gets the most frequent genres in a set time.

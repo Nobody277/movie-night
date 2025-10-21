@@ -1,4 +1,6 @@
-import { img, getTitleRuntime } from "./api.js";
+import { img, getTitleRuntime, getTitleImages } from "./api.js";
+
+const posterChoiceCache = new Map();
 
 /**
  * Returns the genre name given a id from TMDB.
@@ -46,12 +48,17 @@ export function createMovieCard(movie) {
   card.className = 'movie-card';
   try { card.setAttribute('tabindex', '0'); } catch {}
 
-  const posterUrl = movie.poster_path ? img.poster(movie.poster_path) : null;
+  const mediaType = movie.media_type || (movie.first_air_date ? 'tv' : 'movie');
+  const choiceKey = `${mediaType}:${movie.id}`;
+  let posterUrl = null;
+  if (posterChoiceCache.has(choiceKey)) {
+    const chosenPath = posterChoiceCache.get(choiceKey);
+    posterUrl = chosenPath ? img.poster(chosenPath) : (movie.poster_path ? img.poster(movie.poster_path) : null);
+  }
   const rating = typeof movie.vote_average === 'number' ? movie.vote_average.toFixed(1) : 'N/A';
   const title = movie.title || movie.name || '';
   const releaseYear = (movie.release_date || movie.first_air_date) ? new Date(movie.release_date || movie.first_air_date).getFullYear() : 'N/A';
   const genres = movie.genre_ids ? movie.genre_ids.slice(0, 2).map(id => getGenreName(id)).join(', ') : '';
-  const mediaType = movie.media_type || (movie.first_air_date ? 'tv' : 'movie');
 
   try { card.setAttribute('data-id', String(movie.id)); card.setAttribute('data-type', mediaType); } catch {}
 
@@ -80,6 +87,46 @@ export function createMovieCard(movie) {
       if (img.complete) img.classList.add('loaded');
     }
   }
+
+  try {
+    const useRandom = !!(movie && (movie.backdrop_path || movie.poster_path));
+    if (useRandom) {
+      (async () => {
+        const images = await getTitleImages(movie.id, mediaType);
+        const posters = Array.isArray(images?.posters) ? images.posters : [];
+        const prefer = (arr) => {
+          const en = arr.filter(i => (i.iso_639_1 || '').toLowerCase() === 'en' || !i.iso_639_1 || i.iso_639_1 === 'xx');
+          return en.length ? en : arr;
+        };
+        let chosenPath = null;
+        if (posterChoiceCache.has(choiceKey)) {
+          chosenPath = posterChoiceCache.get(choiceKey);
+        } else if (posters.length) {
+          const list = prefer(posters);
+          const pick = list[Math.floor(Math.random() * list.length)];
+          chosenPath = pick && pick.file_path ? pick.file_path : null;
+          posterChoiceCache.set(choiceKey, chosenPath);
+        }
+        const targetSrc = chosenPath ? img.poster(chosenPath) : (movie.poster_path ? img.poster(movie.poster_path) : null);
+        const existingImg = card.querySelector('.poster-img');
+        if (existingImg) {
+          if (targetSrc && targetSrc !== existingImg.getAttribute('src')) {
+            existingImg.addEventListener('load', () => { existingImg.classList.add('loaded'); }, { once: true });
+            existingImg.setAttribute('src', targetSrc);
+          }
+        } else if (targetSrc) {
+          const skel = card.querySelector('.poster-skeleton');
+          const newImg = document.createElement('img');
+          newImg.className = 'poster-img';
+          newImg.setAttribute('alt', title);
+          newImg.setAttribute('loading', 'lazy');
+          newImg.addEventListener('load', () => { newImg.classList.add('loaded'); }, { once: true });
+          newImg.src = targetSrc;
+          if (skel && skel.parentNode) skel.parentNode.replaceChild(newImg, skel);
+        }
+      })();
+    }
+  } catch {}
 
   requestAnimationFrame(() => adjustOverlayHeightFor(card));
   const ro = ensureCardOverlayResizeObserver();

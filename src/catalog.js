@@ -3,7 +3,7 @@
  */
 
 import { startRuntimeTags, setupRail, getGenreName as getMovieGenreName, populateRail, startMovieCards, createMovieCard, createSkeletonCard } from "./ui.js";
-import {getPopularMoviesLast7Days,getAllMovieGenres,discoverMovies,getTopGenres,getAllTVGenres,discoverTV,getTopTVGenres,getTrendingTV} from "./api.js";
+import {getPopularMoviesLast7Days,getAllMovieGenres,discoverMovies,getTopGenres,getAllTVGenres,discoverTV,getTopTVGenres,getTrendingTV, getTitleImages} from "./api.js";
 import { formatDate, img } from "./api.js";
 
 function defaultGetGenreName(id, media) {
@@ -11,13 +11,25 @@ function defaultGetGenreName(id, media) {
 }
 
 // Dropdowns for sorting and time. Needed for all pages.
-function setupDropdowns() {
+function setupDropdowns(mediaType) {
   const sortGroup = document.querySelector('.sort-group');
   const sortToggle = document.querySelector('.sort-toggle');
   const sortMenu = document.getElementById('sort-menu');
   if (sortGroup && sortToggle && sortMenu) {
     const sortLabel = sortToggle.querySelector('.sort-label');
     const sortArrow = sortToggle.querySelector('.sort-arrow');
+    const storageKey = `mn:filters:${mediaType || 'movie'}`;
+    const readState = () => { try { const raw = sessionStorage.getItem(storageKey); return raw ? JSON.parse(raw) : {}; } catch { return {}; } };
+    const writeState = (partial) => { try { const prev = readState(); sessionStorage.setItem(storageKey, JSON.stringify(Object.assign({}, prev, partial))); } catch {} };
+
+    try {
+      const state = readState();
+      if (state && state.sortLabel) {
+        if (sortLabel) sortLabel.textContent = state.sortLabel;
+        const dir = state.sortDir || 'desc';
+        if (sortArrow) { sortArrow.setAttribute('data-dir', dir); sortArrow.textContent = dir === 'asc' ? '↑' : '↓'; }
+      }
+    } catch {}
     const closeMenu = () => { sortMenu.classList.remove('open'); sortToggle.setAttribute('aria-expanded', 'false'); };
     const openMenu = () => { sortMenu.classList.add('open'); sortToggle.setAttribute('aria-expanded', 'true'); };
     sortToggle.addEventListener('click', () => { const willOpen = !sortMenu.classList.contains('open'); if (willOpen) openMenu(); else closeMenu(); });
@@ -28,6 +40,7 @@ function setupDropdowns() {
       const dir = option.getAttribute('data-dir') || 'desc';
       if (sortLabel) sortLabel.textContent = label;
       if (sortArrow) { sortArrow.setAttribute('data-dir', dir); sortArrow.textContent = dir === 'asc' ? '↑' : '↓'; }
+      writeState({ sortLabel: label, sortDir: dir });
       closeMenu();
     });
     document.addEventListener('click', (e) => { if (!sortGroup.contains(e.target)) closeMenu(); });
@@ -39,6 +52,18 @@ function setupDropdowns() {
   const timeMenu = document.getElementById('time-menu');
   if (timeGroup && timeToggle && timeMenu) {
     const timeLabel = timeToggle.querySelector('.time-label');
+    const storageKey = `mn:filters:${mediaType || 'movie'}`;
+    const readState = () => { try { const raw = sessionStorage.getItem(storageKey); return raw ? JSON.parse(raw) : {}; } catch { return {}; } };
+    const writeState = (partial) => { try { const prev = readState(); sessionStorage.setItem(storageKey, JSON.stringify(Object.assign({}, prev, partial))); } catch {} };
+    try {
+      const state = readState();
+      if (state && state.timeValue) {
+        timeToggle.setAttribute('data-value', state.timeValue);
+        const opt = timeMenu.querySelector(`.time-option[data-value="${state.timeValue}"]`);
+        const lbl = opt ? (opt.getAttribute('data-label') || opt.textContent || '') : '';
+        if (timeLabel && lbl) timeLabel.textContent = lbl;
+      }
+    } catch {}
     const closeMenu = () => { timeMenu.classList.remove('open'); timeToggle.setAttribute('aria-expanded', 'false'); };
     const openMenu = () => { timeMenu.classList.add('open'); timeToggle.setAttribute('aria-expanded', 'true'); };
     timeToggle.addEventListener('click', () => { const willOpen = !timeMenu.classList.contains('open'); if (willOpen) openMenu(); else closeMenu(); });
@@ -50,6 +75,7 @@ function setupDropdowns() {
       if (timeLabel) timeLabel.textContent = label;
       timeToggle.setAttribute('data-value', value);
       closeMenu();
+      writeState({ timeValue: value });
     });
     document.addEventListener('click', (e) => { if (!timeGroup.contains(e.target)) closeMenu(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); timeToggle.focus(); } });
@@ -84,6 +110,11 @@ function setupControls(onApply) {
       }
       clearFiltersBtn.blur();
       onApply();
+      try {
+        const storageKey = `mn:filters:${(document.querySelector('main .page-title')?.textContent || '').toLowerCase().includes('tv') ? 'tv' : 'movie'}`;
+        const next = { sortLabel: 'Popularity', sortDir: 'desc', timeValue: 'all', selectedGenreIds: [], mustContainAll: false };
+        sessionStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {}
     });
   }
 
@@ -120,6 +151,34 @@ function setupGenres(config) {
         list.appendChild(allLi);
         const genreInputs = document.querySelectorAll('.genre-input');
         genreInputs.forEach(input => { input.addEventListener('change', updateGenreCounter); });
+        try {
+          const storageKey = `mn:filters:${config.mediaType || 'movie'}`;
+          const raw = sessionStorage.getItem(storageKey);
+          const state = raw ? JSON.parse(raw) : {};
+          const selectedIds = Array.isArray(state?.selectedGenreIds) ? state.selectedGenreIds : [];
+          const mustAll = !!state?.mustContainAll;
+          document.querySelectorAll('.genre-input[data-genre-id]').forEach((input) => {
+            const gid = Number(input.getAttribute('data-genre-id'));
+            if (selectedIds.includes(gid)) input.checked = true;
+          });
+          const allMatchInput = document.querySelector('.genre-input[data-all-match="true"]');
+          if (allMatchInput) allMatchInput.checked = mustAll;
+          updateGenreCounter();
+        } catch {}
+        const persistGenres = () => {
+          try {
+            const storageKey = `mn:filters:${config.mediaType || 'movie'}`;
+            const raw = sessionStorage.getItem(storageKey);
+            const prev = raw ? JSON.parse(raw) : {};
+            const checked = Array.from(document.querySelectorAll('.genre-input[data-genre-id]:checked'))
+              .map((el) => Number(el.getAttribute('data-genre-id')))
+              .filter((n) => Number.isFinite(n) && n > 0);
+            const mustAll = !!document.querySelector('.genre-input[data-all-match="true"]:checked');
+            const next = Object.assign({}, prev || {}, { selectedGenreIds: checked, mustContainAll: mustAll });
+            sessionStorage.setItem(storageKey, JSON.stringify(next));
+          } catch {}
+        };
+        document.querySelectorAll('.genre-input').forEach((input) => { input.addEventListener('change', persistGenres); });
       }
     } catch {}
   })();
@@ -246,18 +305,49 @@ async function startFeaturedHero(config, filters) {
     const bgEl = hero.querySelector('.featured-hero-bg');
     const contentEl = hero.querySelector('.featured-hero-content');
 
-    const renderSlide = (item) => {
+    const pickRandomHeroImage = async (item) => {
+      try {
+        const mediaType = item.media_type || config.mediaType;
+        const images = await getTitleImages(item.id, mediaType);
+        const backs = Array.isArray(images?.backdrops) ? images.backdrops : [];
+        const posters = Array.isArray(images?.posters) ? images.posters : [];
+        const prefer = (arr) => { const en = arr.filter(i => (i.iso_639_1 || '').toLowerCase() === 'en' || !i.iso_639_1 || i.iso_639_1 === 'xx'); return en.length ? en : arr; };
+        const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+        if (backs.length) {
+          const b = pick(prefer(backs));
+          if (b?.file_path) return img.backdrop(b.file_path);
+        }
+        if (posters.length) { const p = pick(prefer(posters)); if (p?.file_path) return img.poster(p.file_path); }
+      } catch {}
+      return item.backdrop_path ? img.backdrop(item.backdrop_path) : (item.poster_path ? img.poster(item.poster_path) : '');
+    };
+
+    const renderSlide = async (item) => {
       const title = item.title || item.name || 'Featured';
       const mediaType = item.media_type || config.mediaType;
       const year = (item.release_date || item.first_air_date)
         ? new Date(item.release_date || item.first_air_date).getFullYear()
         : '';
       const rating = typeof item.vote_average === 'number' ? item.vote_average.toFixed(1) : null;
-      const backdropUrl = item.backdrop_path
-        ? img.backdrop(item.backdrop_path)
-        : (item.poster_path ? img.poster(item.poster_path) : '');
+      const backdropUrl = await pickRandomHeroImage(item);
 
-      if (bgEl) { bgEl.classList.remove('slide-enter'); void bgEl.offsetWidth; bgEl.style.backgroundImage = backdropUrl ? `url('${backdropUrl}')` : ''; bgEl.classList.add('slide-enter'); }
+      if (bgEl) {
+        const nextId = String(((Number(hero.dataset.bgToken) || 0) + 1));
+        hero.dataset.bgToken = nextId;
+        const url = backdropUrl || '';
+        if (!url) return;
+        const pre = new Image();
+        try { pre.decoding = 'async'; } catch {}
+        pre.onload = () => {
+          if (hero.dataset.bgToken !== nextId) return;
+          bgEl.classList.remove('slide-enter');
+          void bgEl.offsetWidth;
+          bgEl.style.backgroundImage = `url('${url}')`;
+          bgEl.classList.add('slide-enter');
+          bgEl.classList.add('visible');
+        };
+        pre.src = url;
+      }
       if (contentEl) {
         contentEl.classList.remove('slide-enter'); void contentEl.offsetWidth;
         contentEl.innerHTML = `
@@ -281,7 +371,7 @@ async function startFeaturedHero(config, filters) {
     try { if (hero.dataset.featureTimerId) { window.clearInterval(Number(hero.dataset.featureTimerId)); delete hero.dataset.featureTimerId; } } catch {}
 
     let index = 0;
-    renderSlide(results[index]);
+    await renderSlide(results[index]);
     const advance = () => { index = (index + 1) % results.length; renderSlide(results[index]); };
     let timer = window.setInterval(advance, 6000);
     hero.dataset.featureTimerId = String(timer);
@@ -614,7 +704,7 @@ async function renderRails(config, filters) {
  * @param {(id:number, media:'movie'|'tv') => string} [config.getGenreName]
  */
 export async function startCatalogPage(config) {
-  setupDropdowns();
+  setupDropdowns(config.mediaType);
   try {
     const sortMenu = document.getElementById('sort-menu');
     if (sortMenu) {

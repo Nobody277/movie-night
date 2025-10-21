@@ -810,6 +810,8 @@ canvas.p5Canvas {
   filter: brightness(0.9) saturate(110%);
   transform: scale(1);
   will-change: transform, opacity;
+  opacity: 0;
+  transition: opacity 360ms ease-out;
 }
 
 .featured-hero-overlay {
@@ -831,7 +833,7 @@ canvas.p5Canvas {
 
 @keyframes heroKenBurns {
   0% { transform: scale(1) translate3d(0,0,0); }
-  100% { transform: scale(1.08) translate3d(1%, 0, 0); }
+  100% { transform: scale(1.04) translate3d(1%, 0, 0); }
 }
 
 @keyframes heroFadeIn {
@@ -840,7 +842,11 @@ canvas.p5Canvas {
 }
 
 .featured-hero-bg.slide-enter {
-  animation: heroFadeIn 420ms ease-out forwards, heroKenBurns 10s ease-in-out forwards;
+  animation: heroFadeIn 420ms ease-out forwards, heroKenBurns 12s ease-in-out forwards;
+}
+.featured-hero-bg.visible { opacity: 1; }
+.featured-hero.no-zoom .featured-hero-bg.slide-enter {
+  animation: heroFadeIn 420ms ease-out forwards;
 }
 
 .featured-hero-content.slide-enter {
