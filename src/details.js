@@ -1,4 +1,7 @@
 import { fetchTMDBData, img, bestBackdropForSize } from "./api.js";
+import { selectPreferredImage, formatYear } from "./utils.js";
+import { fetchTrailerUrl, fetchTitleImages } from "./media-utils.js";
+import { VIDEO_CACHE_TTL_MS, PROVIDER_CACHE_TTL_MS, MAX_PROVIDER_ICONS } from "./constants.js";
 
 function parseTypeAndId() {
   try {
@@ -31,15 +34,6 @@ function renderHeroSkeleton(root) {
       </div>
     </div>
   `;
-}
-
-function formatYear(dateString) {
-  try {
-    if (!dateString) return "";
-    const y = new Date(dateString).getFullYear();
-    if (Number.isFinite(y)) return String(y);
-  } catch {}
-  return "";
 }
 
 function formatRuntimeOrEpisodes(details, type) {
@@ -83,20 +77,12 @@ export async function startDetailsPage() {
     const heroWidth = (() => { try { return (document.getElementById("details-hero") || document.querySelector(".featured-hero")).clientWidth || window.innerWidth || 1280; } catch { return 1280; } })();
     try {
       const images = await fetchTitleImages(type, id);
-      const backs = Array.isArray(images?.backdrops) ? images.backdrops : [];
-      const posters = Array.isArray(images?.posters) ? images.posters : [];
-      const prefer = (arr) => {
-        const en = arr.filter(i => (i.iso_639_1 || '').toLowerCase() === 'en' || !i.iso_639_1 || i.iso_639_1 === 'xx');
-        return en.length ? en : arr;
-      };
-      const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-      if (backs.length) {
-        const b = pick(prefer(backs));
-        if (b && b.file_path) backdropUrl = bestBackdropForSize(b.file_path, heroWidth);
-      }
-      if (!backdropUrl && posters.length) {
-        const p = pick(prefer(posters));
-        if (p && p.file_path) backdropUrl = img.poster(p.file_path);
+      const filePath = selectPreferredImage(images, true);
+      if (filePath) {
+        // Check if it's a backdrop by seeing if it exists in the backdrops array
+        const backs = Array.isArray(images?.backdrops) ? images.backdrops : [];
+        const isBackdrop = backs.some(b => b.file_path === filePath);
+        backdropUrl = isBackdrop ? bestBackdropForSize(filePath, heroWidth) : img.poster(filePath);
       }
     } catch {}
     if (!backdropUrl) {
@@ -195,7 +181,7 @@ function detectRegion() {
 
 async function fetchWatchProviders(type, id, region) {
   try {
-    const data = await fetchTMDBData(`/${type}/${id}/watch/providers`, { maxRetries: 2, ttlMs: 300000, signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(1500) : undefined });
+    const data = await fetchTMDBData(`/${type}/${id}/watch/providers`, { maxRetries: 2, ttlMs: PROVIDER_CACHE_TTL_MS, signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(1500) : undefined });
     const byRegion = data && data.results ? data.results[region] || data.results['US'] || null : null;
     if (!byRegion) return [];
     const pools = [];
@@ -211,7 +197,7 @@ async function fetchWatchProviders(type, id, region) {
       seen.add(p.provider_id);
       list.push({ id: p.provider_id, name: p.provider_name, logo: p.logo_path });
     });
-    return list.slice(0, 8);
+    return list.slice(0, MAX_PROVIDER_ICONS);
   } catch { return []; }
 }
 
@@ -233,7 +219,7 @@ function updateProviderMetaTags(providers) {
     if (!group) { group = document.createElement('div'); group.id = 'provider-meta-group'; head.appendChild(group); }
     group.innerHTML = '';
     const base = 'https://image.tmdb.org/t/p/w92';
-    providers.slice(0, 8).forEach((p, idx) => {
+    providers.slice(0, MAX_PROVIDER_ICONS).forEach((p, idx) => {
       if (!p || !p.logo) return;
       const link = document.createElement('link');
       link.setAttribute('rel', 'icon');
@@ -248,45 +234,4 @@ function updateProviderMetaTags(providers) {
       group.appendChild(meta);
     });
   } catch {}
-}
-
-async function fetchTrailerUrl(type, id) {
-  try {
-    const data = await fetchTMDBData(`/${type}/${id}/videos`, { ttlMs: 10 * 60 * 1000, maxRetries: 2 });
-    const list = Array.isArray(data?.results) ? data.results : [];
-    const youtube = list.filter(v => v && v.site === 'YouTube' && v.key);
-    if (youtube.length === 0) return null;
-    const typeOf = (v) => (v.type || '').toLowerCase();
-    const bucket = (t) => youtube.filter(v => typeOf(v) === t);
-    const pickBest = (arr) => {
-      if (!arr.length) return null;
-      const preferEn = arr.filter(v => (v.iso_639_1 || '').toLowerCase() === 'en');
-      const candidates = preferEn.length ? preferEn : arr;
-      candidates.sort((a, b) => {
-        const officialCmp = (b.official ? 1 : 0) - (a.official ? 1 : 0);
-        if (officialCmp !== 0) return officialCmp;
-        const resCmp = (b.size || 0) - (a.size || 0);
-        if (resCmp !== 0) return resCmp;
-        const timeCmp = (b.published_at ? Date.parse(b.published_at) : 0) - (a.published_at ? Date.parse(a.published_at) : 0);
-        return timeCmp;
-      });
-      return candidates[0] || null;
-    };
-    const order = ['trailer', 'teaser', 'clip'];
-    let best = null;
-    for (const t of order) { best = pickBest(bucket(t)); if (best) break; }
-    if (!best) best = pickBest(youtube);
-    return best && best.key ? `https://www.youtube.com/watch?v=${best.key}` : null;
-  } catch {
-    return null;
-  }
-}
-
-async function fetchTitleImages(type, id) {
-  try {
-    const data = await fetchTMDBData(`/${type}/${id}/images`, { ttlMs: 24 * 60 * 60 * 1000, maxRetries: 2 });
-    return data || null;
-  } catch {
-    return null;
-  }
 }

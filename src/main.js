@@ -5,6 +5,8 @@ import { startRuntimeTags, getGenreName, setupRail, startMovieCards, disposeUI, 
 import { startHomePage } from "./home.js";
 import { startMoviesPage } from "./movies.js";
 import { startTVPage } from "./tv.js";
+import { sleep } from "./utils.js";
+import { PAGE_TRANSITION_DURATION_MS, SEARCH_DEBOUNCE_MS, MAX_SEARCH_RESULTS } from "./constants.js";
 
 if (typeof document !== 'undefined') {
   const removeNoFouc = () => document.body && document.body.classList.remove('no-fouc');
@@ -128,7 +130,7 @@ class PageTransition {
       this.container.classList.add('page-transitioning');
       this.overlay.classList.add('active');
       
-      await this.wait(150);
+      await this.wait(PAGE_TRANSITION_DURATION_MS);
 
       const prettyToFile = (u) => {
         if (!u) return 'index.html';
@@ -182,7 +184,7 @@ class PageTransition {
         window.history.pushState(null, '', pretty);
       }
       
-      await this.wait(150);
+      await this.wait(PAGE_TRANSITION_DURATION_MS);
       
       this.overlay.classList.remove('active');
       this.container.classList.remove('page-transitioning');
@@ -298,8 +300,8 @@ class PageTransition {
     }
   }
 
-  wait(ms) { // Guess what this does. You get a cookie if you figure it out.
-    return new Promise(resolve => setTimeout(resolve, ms));
+  wait(ms) { // Guess what this does. You get a cookie if you figure it out. (Hint: it's just sleep with a fancy name)
+    return sleep(ms);
   }
 }
 
@@ -391,7 +393,7 @@ function startSearchFunctionality() {
         const data = await fetchTMDBData(`/search/multi?query=${encodeURIComponent(q)}&include_adult=false`);
         let results = Array.isArray(data?.results) ? data.results : [];
         results = results.filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !!r.poster_path);
-        renderResults(results.slice(0, 5));
+        renderResults(results.slice(0, MAX_SEARCH_RESULTS));
       } catch (e) {
         renderResults([]);
       }
@@ -478,7 +480,7 @@ function startSearchFunctionality() {
     searchInput.addEventListener('input', () => {
       const q = searchInput.value;
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => doSearch(q), 250);
+      debounceTimer = setTimeout(() => doSearch(q), SEARCH_DEBOUNCE_MS);
     });
 
     searchInput.setAttribute('role', 'combobox');

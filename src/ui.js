@@ -1,4 +1,5 @@
 import { img, getTitleRuntime, getTitleImages } from "./api.js";
+import { RUNTIME_MAX_CONCURRENCY, INTERSECTION_OBSERVER_MARGIN, MAX_RAIL_ITEMS } from "./constants.js";
 
 const posterChoiceCache = new Map();
 
@@ -157,7 +158,6 @@ let cardOverlayResizeObserver = null;
 let addTooltip = null;
 let pendingRuntimeUpdates = [];
 let runtimeFlushScheduled = false;
-const RUNTIME_MAX_CONCURRENCY = 6;
 let runtimeActiveCount = 0;
 const runtimeQueue = [];
 const runtimePendingByKey = new Map(); // key -> { elements:Set<HTMLElement>, type:string }
@@ -264,7 +264,7 @@ export function ensureRuntimeObserver() {
       }
       bucket.elements.add(el);
     });
-  }, { rootMargin: '200px 0px' });
+  }, { rootMargin: INTERSECTION_OBSERVER_MARGIN });
   return runtimeObserver;
 }
 
@@ -284,7 +284,7 @@ export async function populateRail(rail, fetchFunction, options) {
   const track = rail.querySelector('.rail-track');
   if (!track) return;
 
-  const opts = Object.assign({ minCards: 20, maxAttempts: 3, attempt: 0 }, options || {});
+  const opts = Object.assign({ minCards: MAX_RAIL_ITEMS, maxAttempts: 3, attempt: 0 }, options || {});
 
   if (rail.dataset.retryTimeoutId) {
     try { window.clearTimeout(Number(rail.dataset.retryTimeoutId)); } catch {}
@@ -325,7 +325,7 @@ export async function populateRail(rail, fetchFunction, options) {
     const data = await fetchFunction();
     const results = Array.isArray(data?.results) ? data.results : [];
     const moviesWithPosters = results.filter(movie => movie.poster_path);
-    const movies = moviesWithPosters.slice(0, 20);
+    const movies = moviesWithPosters.slice(0, MAX_RAIL_ITEMS);
 
     if (!movies.length) { scheduleRetry(); return; }
 

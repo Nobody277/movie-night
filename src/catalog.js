@@ -3,43 +3,13 @@
  */
 
 import { startRuntimeTags, setupRail, getGenreName as getMovieGenreName, populateRail, startMovieCards, createMovieCard, createSkeletonCard } from "./ui.js";
-import {getPopularMoviesLast7Days,getAllMovieGenres,discoverMovies,getTopGenres,getAllTVGenres,discoverTV,getTopTVGenres,getTrendingTV, getTitleImages, fetchTMDBData} from "./api.js";
-import { formatDate, img } from "./api.js";
+import {getPopularMoviesLast7Days,getAllMovieGenres,discoverMovies,getTopGenres,getAllTVGenres,discoverTV,getTopTVGenres,getTrendingTV, fetchTMDBData, img} from "./api.js";
+import { formatDate, selectPreferredImage } from "./utils.js";
+import { fetchTrailerUrl, fetchTitleImages } from "./media-utils.js";
+import { VIDEO_CACHE_TTL_MS, HERO_ROTATION_INTERVAL_MS, MAX_HERO_SLIDES, MAX_RAIL_ITEMS } from "./constants.js";
 
 function defaultGetGenreName(id, media) {
   return getMovieGenreName(id) || '';
-}
-
-async function fetchTrailerUrl(type, id) {
-  try {
-    const data = await fetchTMDBData(`/${type}/${id}/videos`, { ttlMs: 10 * 60 * 1000, maxRetries: 2 });
-    const list = Array.isArray(data?.results) ? data.results : [];
-    const youtube = list.filter(v => v && v.site === 'YouTube' && v.key);
-    if (youtube.length === 0) return null;
-    const typeOf = (v) => (v.type || '').toLowerCase();
-    const bucket = (t) => youtube.filter(v => typeOf(v) === t);
-    const pickBest = (arr) => {
-      if (!arr.length) return null;
-      const preferEn = arr.filter(v => (v.iso_639_1 || '').toLowerCase() === 'en');
-      const candidates = preferEn.length ? preferEn : arr;
-      candidates.sort((a, b) => {
-        const officialCmp = (b.official ? 1 : 0) - (a.official ? 1 : 0);
-        if (officialCmp !== 0) return officialCmp;
-        const resCmp = (b.size || 0) - (a.size || 0);
-        if (resCmp !== 0) return resCmp;
-        const timeCmp = (b.published_at ? Date.parse(b.published_at) : 0) - (a.published_at ? Date.parse(a.published_at) : 0);
-        return timeCmp;
-      });
-      return candidates[0] || null;
-    };
-    const order = ['trailer', 'teaser', 'clip'];
-    let best = null;
-    for (const t of order) { best = pickBest(bucket(t)); if (best) break; }
-    if (!best) best = pickBest(youtube);
-    return best && best.key ? `https://www.youtube.com/watch?v=${best.key}` : null;
-  } catch {
-    return null;
-  }
 }
 
 // Dropdowns for sorting and time. Needed for all pages.
@@ -324,7 +294,7 @@ async function startFeaturedHero(config, filters) {
       }
     } catch {}
 
-    results = results.slice(0, 8);
+    results = results.slice(0, MAX_HERO_SLIDES);
     if (!results.length) { hero.style.display = 'none'; return; }
     hero.style.display = '';
 
@@ -340,16 +310,14 @@ async function startFeaturedHero(config, filters) {
     const pickRandomHeroImage = async (item) => {
       try {
         const mediaType = item.media_type || config.mediaType;
-        const images = await getTitleImages(item.id, mediaType);
-        const backs = Array.isArray(images?.backdrops) ? images.backdrops : [];
-        const posters = Array.isArray(images?.posters) ? images.posters : [];
-        const prefer = (arr) => { const en = arr.filter(i => (i.iso_639_1 || '').toLowerCase() === 'en' || !i.iso_639_1 || i.iso_639_1 === 'xx'); return en.length ? en : arr; };
-        const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-        if (backs.length) {
-          const b = pick(prefer(backs));
-          if (b?.file_path) return img.backdrop(b.file_path);
+        const images = await fetchTitleImages(mediaType, item.id);
+        const filePath = selectPreferredImage(images, true);
+        if (filePath) {
+          // Determine if it's a backdrop or poster based on aspect ratio heuristic
+          const backs = Array.isArray(images?.backdrops) ? images.backdrops : [];
+          const isBackdrop = backs.some(b => b.file_path === filePath);
+          return isBackdrop ? img.backdrop(filePath) : img.poster(filePath);
         }
-        if (posters.length) { const p = pick(prefer(posters)); if (p?.file_path) return img.poster(p.file_path); }
       } catch {}
       return item.backdrop_path ? img.backdrop(item.backdrop_path) : (item.poster_path ? img.poster(item.poster_path) : '');
     };
@@ -434,10 +402,10 @@ async function startFeaturedHero(config, filters) {
     let index = 0;
     await renderSlide(results[index]);
     const advance = () => { index = (index + 1) % results.length; renderSlide(results[index]); };
-    let timer = window.setInterval(advance, 6000);
+    let timer = window.setInterval(advance, HERO_ROTATION_INTERVAL_MS);
     hero.dataset.featureTimerId = String(timer);
     const pause = () => { if (timer) { window.clearInterval(timer); timer = null; } };
-    const resume = () => { if (!timer) { timer = window.setInterval(advance, 6000); } };
+    const resume = () => { if (!timer) { timer = window.setInterval(advance, HERO_ROTATION_INTERVAL_MS); } };
     hero.addEventListener('mouseenter', pause);
     hero.addEventListener('mouseleave', resume);
     hero.addEventListener('focusin', pause);
@@ -503,7 +471,7 @@ function buildFetcherFactory(config, filters, seenIds) {
       }
     }
     
-    const results = filtered.slice(0, 20);
+    const results = filtered.slice(0, MAX_RAIL_ITEMS);
     if (seenIds) results.forEach(m => { try { seenIds.add(m.id); } catch {} });
     return { results };
   };

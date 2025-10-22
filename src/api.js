@@ -2,15 +2,14 @@
  * Helper for TMDB API: developer.themoviedb.org
  * @module api
 */
-export const TMDB_BASE_URL = 'https://tmdb-proxy.movie-night.workers.dev';
-export const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500'; // Poster / movie-card
-export const TMDB_BACKDROP_BASE_URL = 'https://image.tmdb.org/t/p/w1280'; // Big Poster / featured-hero
-export const TMDB_BACKDROP_W780_BASE_URL = 'https://image.tmdb.org/t/p/w780'; // Smaller hero for narrow screens
-export const TMDB_BACKDROP_ORIGINAL_BASE_URL = 'https://image.tmdb.org/t/p/original'; // Highest res for hero zoom
+import { TMDB_BASE_URL, TMDB_IMAGE_BASE_URL, TMDB_BACKDROP_BASE_URL, TMDB_BACKDROP_W780_BASE_URL, TMDB_BACKDROP_ORIGINAL_BASE_URL, RESPONSE_CACHE_MAX_ENTRIES, DEFAULT_CACHE_TTL_MS, LONG_CACHE_TTL_MS, MAX_RETRIES, BASE_BACKOFF_MS, BACKOFF_JITTER_MS } from './constants.js';
+import { sleep, formatDate } from './utils.js';
+
+export { TMDB_BASE_URL, TMDB_IMAGE_BASE_URL, TMDB_BACKDROP_BASE_URL, TMDB_BACKDROP_W780_BASE_URL, TMDB_BACKDROP_ORIGINAL_BASE_URL };
+
 const runtimeCache = new Map(); // Saving movies/tv runtime so we don't have to fetch it again
 const inflightRequests = new Map(); // In-flight request deduplication so we don't make duplicate requests
 const responseCache = new Map(); // Simple response cache with TTL + LRU eviction
-const RESPONSE_CACHE_MAX_ENTRIES = 200; // Max number of entries in the response cache
 
 /**
  * Delete the oldest entry in the response cache if it's over the max number of entries
@@ -24,20 +23,18 @@ function deleteOldestEntry() {
   }
 }
 
-function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
-
 /**
  * Gets data from TMDB
  * @param {string} endpoint - API path beginning with "/" (e.g. "/trending/movie/week").
  * @param {object} [opts]
- * @param {number} [opts.ttlMs=60000] - Cache TTL in milliseconds
- * @param {number} [opts.maxRetries=3] - Retries on 429/5xx
+ * @param {number} [opts.ttlMs] - Cache TTL in milliseconds
+ * @param {number} [opts.maxRetries] - Retries on 429/5xx
  * @returns {Promise<any|null>} Parsed JSON response or `null` on failure.
  * @example fetchTMDBData('/trending/movie/week')
  * @example fetchTMDBData('/trending/movie/week', { ttlMs: 60000, maxRetries: 3, signal: AbortSignal.timeout(10000) })
  */
 export async function fetchTMDBData(endpoint, opts = {}) {
-  const { ttlMs = 60000, maxRetries = 3, signal } = opts;
+  const { ttlMs = DEFAULT_CACHE_TTL_MS, maxRetries = MAX_RETRIES, signal } = opts;
   const cacheKey = endpoint;
 
   // If we have a cached entry then just return it
@@ -85,7 +82,7 @@ export async function fetchTMDBData(endpoint, opts = {}) {
           if (attempt === maxRetries) break;
           const retryAfterHeader = res.headers.get('retry-after');
           const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : null;
-          const backoff = retryAfterMs != null ? retryAfterMs : (300 * Math.pow(2, attempt)) + Math.floor(Math.random() * 120);
+          const backoff = retryAfterMs != null ? retryAfterMs : (BASE_BACKOFF_MS * Math.pow(2, attempt)) + Math.floor(Math.random() * BACKOFF_JITTER_MS);
           await sleep(backoff);
           attempt += 1;
           continue;
@@ -99,7 +96,7 @@ export async function fetchTMDBData(endpoint, opts = {}) {
           return null;
         }
         // Alright lets try it again and then wait until the server stops crying.
-        const backoff = (300 * Math.pow(2, attempt)) + Math.floor(Math.random() * 120);
+        const backoff = (BASE_BACKOFF_MS * Math.pow(2, attempt)) + Math.floor(Math.random() * BACKOFF_JITTER_MS);
         await sleep(backoff);
         attempt += 1;
       }
@@ -152,7 +149,7 @@ export async function getTrendingTV() {
  * @returns {Promise<{id:number,name:string}[]|null>}
  */
 export async function getAllMovieGenres() {
-  const data = await fetchTMDBData('/genre/movie/list', { ttlMs: 24 * 60 * 60 * 1000 });
+  const data = await fetchTMDBData('/genre/movie/list', { ttlMs: LONG_CACHE_TTL_MS });
   const arr = Array.isArray(data?.genres) ? data.genres : [];
   return arr;
 }
@@ -162,7 +159,7 @@ export async function getAllMovieGenres() {
  * @returns {Promise<{id:number,name:string}[]|null>}
  */
 export async function getAllTVGenres() {
-  const data = await fetchTMDBData('/genre/tv/list', { ttlMs: 24 * 60 * 60 * 1000 });
+  const data = await fetchTMDBData('/genre/tv/list', { ttlMs: LONG_CACHE_TTL_MS });
   const arr = Array.isArray(data?.genres) ? data.genres : [];
   return arr;
 }
@@ -198,15 +195,6 @@ export async function getNewReleases() {
   }
   
   return result;
-}
-
-/**
- * Format a Date as YYYY-MM-DD.
- * @param {Date} d
- * @returns {string}
- */
-export function formatDate(d) {
-  return d.toISOString().split('T')[0];
 }
 
 /**
@@ -316,7 +304,7 @@ export function bestBackdropForSize(filePath, containerCssWidth, devicePixelRati
 export async function getTitleImages(id, mediaType = 'movie') {
   try {
     const endpoint = mediaType === 'tv' ? `/tv/${id}/images` : `/movie/${id}/images`;
-    return await fetchTMDBData(endpoint, { ttlMs: 24 * 60 * 60 * 1000, maxRetries: 2 });
+    return await fetchTMDBData(endpoint, { ttlMs: LONG_CACHE_TTL_MS, maxRetries: 2 });
   } catch {
     return null;
   }
