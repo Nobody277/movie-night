@@ -10,7 +10,8 @@ export default defineConfig({
         movies: resolve(process.cwd(), 'movies.html'),
         details: resolve(process.cwd(), 'details.html'),
         tv: resolve(process.cwd(), 'tv.html'),
-        search: resolve(process.cwd(), 'search.html')
+        search: resolve(process.cwd(), 'search.html'),
+        myList: resolve(process.cwd(), 'my-list.html')
       }
     }
   },
