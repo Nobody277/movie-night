@@ -8,6 +8,8 @@ import * as listStore from "./list-store.js";
 import { showMenu } from "./menu.js";
 import { createMovieCard, startRuntimeTags, startMovieCards, updateAddButton } from "./ui.js";
 
+import { TOOLTIP_OFFSET_PX } from "./constants.js";
+
 // Module State (Private)
 
 let unsubscribe = null;
@@ -220,6 +222,7 @@ function renderList(list, container, isCustom) {
       });
 
       addCardActionMenu(placeholderCard, item, list.id);
+      addTitleTooltip(placeholderCard);
 
       track.appendChild(placeholderCard);
       
@@ -279,6 +282,7 @@ function renderList(list, container, isCustom) {
             });
 
             addCardActionMenu(updatedCard, item, list.id);
+            addTitleTooltip(updatedCard);
 
             if (placeholderCard.parentNode) {
               placeholderCard.parentNode.replaceChild(updatedCard, placeholderCard);
@@ -360,6 +364,34 @@ function toggleExpand(section, button) {
  * Set up drag navigation for expanded view (disabled)
  */
 function setupExpandedDragNavigation(section, track) {}
+
+/**
+ * Add title tooltip to a card
+ * @param {HTMLElement} card
+ */
+function addTitleTooltip(card) {
+  const titleElement = card.querySelector('.movie-title');
+  if (titleElement) {
+    let titleTooltip = null;
+    const showTitleTooltip = () => {
+      if (titleElement.scrollWidth > titleElement.clientWidth) {
+        if (!titleTooltip) {
+          titleTooltip = document.createElement('div');
+          titleTooltip.className = 'title-tooltip';
+          titleTooltip.textContent = titleElement.textContent || '';
+          document.body.appendChild(titleTooltip);
+        }
+        const rect = titleElement.getBoundingClientRect();
+        titleTooltip.style.left = `${rect.left + rect.width / 2}px`;
+        titleTooltip.style.top = `${rect.bottom + TOOLTIP_OFFSET_PX}px`;
+        titleTooltip.classList.add('visible');
+      }
+    };
+    const hideTitleTooltip = () => { if (titleTooltip) titleTooltip.classList.remove('visible'); };
+    titleElement.addEventListener('mouseenter', showTitleTooltip);
+    titleElement.addEventListener('mouseleave', hideTitleTooltip);
+  }
+}
 
 /**
  * Add action menu to card
