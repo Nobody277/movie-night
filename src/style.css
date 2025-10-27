@@ -981,10 +981,12 @@ canvas.p5Canvas {
 
 .popover-menu {
   position: fixed;
-  background: var(--panel);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  background: rgba(21,25,35,0.35);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 10px;
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.06);
   padding: 6px;
   min-width: 180px;
   z-index: 10000;

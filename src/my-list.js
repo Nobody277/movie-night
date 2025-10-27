@@ -667,7 +667,7 @@ function handleShare() {
  */
 function handleShareList(list) {
   try {
-    alert(`Share clicked for list: ${list.name}`);
+    alert(`Under construction come back later`);
   } catch {}
 }
 
