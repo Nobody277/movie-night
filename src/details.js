@@ -1,8 +1,61 @@
-import { fetchTMDBData, img, bestBackdropForSize } from "./api.js";
-import { selectPreferredImage, formatYear } from "./utils.js";
-import { fetchTrailerUrl, fetchTitleImages } from "./media-utils.js";
-import { VIDEO_CACHE_TTL_MS, PROVIDER_CACHE_TTL_MS, MAX_PROVIDER_ICONS } from "./constants.js";
+import { bestBackdropForSize, fetchTMDBData, img } from "./api.js";
+import { fetchTitleImages, fetchTrailerUrl } from "./media-utils.js";
+import { attachTrailerButtonHandlers, formatYear, isBackdropImage, selectPreferredImage } from "./utils.js";
 
+import { MAX_PROVIDER_ICONS, PROVIDER_CACHE_TTL_MS, PROVIDER_FETCH_TIMEOUT_MS, PROVIDER_MAX_RETRIES, VIDEO_CACHE_TTL_MS } from "./constants.js";
+
+// Module State (Private)
+
+let currentDetailsToken = 0;
+
+// Public Exports
+
+/**
+ * Initialize details page hero, metadata, trailer, providers
+ * @returns {Promise<void>}
+ */
+export async function startDetailsPage() {
+  const myToken = ++currentDetailsToken;
+  const hero = document.getElementById("details-hero") || document.querySelector(".featured-hero");
+  if (!hero) return;
+  hero.classList.add("loading");
+  try { hero.classList.add('no-zoom'); } catch {}
+  renderHeroSkeleton(hero);
+
+  const { type, id } = parseTypeAndId();
+  if (!type || !id) {
+    const t = hero.querySelector(".featured-title");
+    if (t) t.textContent = "Title not found";
+    hero.classList.remove("loading");
+    return;
+  }
+
+  try {
+    const data = await fetchDetailsData(type, id);
+    
+    if (myToken !== currentDetailsToken) return;
+    
+    renderDetailsHero(hero, data, type, myToken, currentDetailsToken);
+    
+    if (myToken !== currentDetailsToken) return;
+    
+    enrichDetailsWithProviders(hero, type, id, myToken, currentDetailsToken);
+
+  } catch (e) {
+    console.error("Failed to load details page for", type, id, e);
+    const contentEl = hero.querySelector(".featured-hero-content");
+    if (contentEl) contentEl.innerHTML = `<h3 class="featured-title">Failed to load</h3>`;
+  } finally {
+    hero.classList.remove("loading");
+  }
+}
+
+// Data Fetching Functions (Private)
+
+/**
+ * Parse media type and ID from URL pathname
+ * @returns {Object} {type: string|null, id: number|null}
+ */
 function parseTypeAndId() {
   try {
     const path = window.location.pathname || "";
@@ -18,6 +71,101 @@ function parseTypeAndId() {
   return { type: null, id: null };
 }
 
+/**
+ * Fetch details data for a title
+ * @param {string} type
+ * @param {number} id
+ * @returns {Promise<Object>}
+ */
+async function fetchDetailsData(type, id) {
+  try {
+    const endpoint = type === 'tv' ? `/tv/${id}` : `/movie/${id}`;
+    const details = await fetchTMDBData(endpoint);
+    if (!details) throw new Error("Missing details");
+
+    const title = details.title || details.name || "Untitled";
+    const year = formatYear(details.release_date || details.first_air_date);
+    const rating = typeof details.vote_average === "number" ? details.vote_average.toFixed(1) : null;
+    
+    let backdropUrl = "";
+    const heroWidth = (() => { 
+      try { 
+        return (document.getElementById("details-hero") || document.querySelector(".featured-hero")).clientWidth || window.innerWidth || 1280; 
+      } catch { 
+        return 1280; 
+      } 
+    })();
+    
+    try {
+      const images = await fetchTitleImages(type, id);
+      const filePath = selectPreferredImage(images, true);
+      if (filePath) {
+        const isBackdrop = isBackdropImage(filePath, images);
+        backdropUrl = isBackdrop ? bestBackdropForSize(filePath, heroWidth) : img.poster(filePath);
+      }
+    } catch {}
+    
+    if (!backdropUrl) {
+      backdropUrl = details.backdrop_path ? bestBackdropForSize(details.backdrop_path, heroWidth)
+        : (details.poster_path ? img.poster(details.poster_path) : "");
+    }
+    
+    const runtimeOrEps = formatRuntimeOrEpisodes(details, type);
+
+    return { details, title, year, rating, backdropUrl, runtimeOrEps };
+  } catch (error) {
+    console.error('Failed to fetch details data for', type, id, error);
+    throw error;
+  }
+}
+
+/**
+ * Detect user's region from browser language
+ * @returns {string}
+ */
+function detectRegion() {
+  try {
+    const locale = navigator.language || navigator.userLanguage || 'en-US';
+    const m = String(locale).match(/-([A-Za-z]{2})$/);
+    return (m && m[1] ? m[1] : 'US').toUpperCase();
+  } catch { return 'US'; }
+}
+
+/**
+ * Fetch watch provider data for a title
+ * @param {string} type
+ * @param {number} id
+ * @param {string} region
+ * @returns {Promise<Array>}
+ */
+async function fetchWatchProviders(type, id, region) {
+  try {
+    const data = await fetchTMDBData(`/${type}/${id}/watch/providers`, { maxRetries: PROVIDER_MAX_RETRIES, ttlMs: PROVIDER_CACHE_TTL_MS, signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(PROVIDER_FETCH_TIMEOUT_MS) : undefined });
+    const byRegion = data && data.results ? data.results[region] || data.results['US'] || null : null;
+    if (!byRegion) return [];
+    const pools = [];
+    if (Array.isArray(byRegion.flatrate)) pools.push(...byRegion.flatrate);
+    if (Array.isArray(byRegion.free)) pools.push(...byRegion.free);
+    if (Array.isArray(byRegion.ads)) pools.push(...byRegion.ads);
+    if (Array.isArray(byRegion.rent)) pools.push(...byRegion.rent);
+    if (Array.isArray(byRegion.buy)) pools.push(...byRegion.buy);
+    const seen = new Set();
+    const list = [];
+    pools.forEach((p) => {
+      if (!p || !p.provider_id || seen.has(p.provider_id)) return;
+      seen.add(p.provider_id);
+      list.push({ id: p.provider_id, name: p.provider_name, logo: p.logo_path });
+    });
+    return list.slice(0, MAX_PROVIDER_ICONS);
+  } catch { return []; }
+}
+
+// Rendering Functions (Private)
+
+/**
+ * Render skeleton loading state for hero section
+ * @param {HTMLElement} root
+ */
 function renderHeroSkeleton(root) {
   if (!root) return;
   root.innerHTML = `
@@ -36,62 +184,20 @@ function renderHeroSkeleton(root) {
   `;
 }
 
-function formatRuntimeOrEpisodes(details, type) {
-  if (type === 'tv') {
-    if (Number.isFinite(details?.number_of_episodes) && details.number_of_episodes > 0) return `${details.number_of_episodes} Eps`;
-    if (Array.isArray(details?.episode_run_time) && Number.isFinite(details.episode_run_time[0])) return `${details.episode_run_time[0]}min`;
-    return '--';
-  }
-  const minutes = Number(details?.runtime);
-  if (!Number.isFinite(minutes) || minutes <= 0) return "--";
-  return `${Math.floor(minutes)}min`;
-}
-
-let currentDetailsToken = 0;
-
-export async function startDetailsPage() {
-  const myToken = ++currentDetailsToken;
-  const hero = document.getElementById("details-hero") || document.querySelector(".featured-hero");
-  if (!hero) return;
-  hero.classList.add("loading");
-  try { hero.classList.add('no-zoom'); } catch {}
-  renderHeroSkeleton(hero);
-
-  const { type, id } = parseTypeAndId();
-  if (!type || !id) {
-    const t = hero.querySelector(".featured-title");
-    if (t) t.textContent = "Title not found";
-    hero.classList.remove("loading");
-    return;
-  }
-
+/**
+ * Render hero section with details data
+ * @param {HTMLElement} hero
+ * @param {Object} data
+ * @param {string} type
+ * @param {number} myToken
+ * @param {number} currentDetailsToken
+ */
+function renderDetailsHero(hero, data, type, myToken, currentDetailsToken) {
   try {
-    const endpoint = type === 'tv' ? `/tv/${id}` : `/movie/${id}`;
-    const details = await fetchTMDBData(endpoint);
-    if (!details) throw new Error("Missing details");
-
-    const title = details.title || details.name || "Untitled";
-    const year = formatYear(details.release_date || details.first_air_date);
-    const rating = typeof details.vote_average === "number" ? details.vote_average.toFixed(1) : null;
-    let backdropUrl = "";
-    const heroWidth = (() => { try { return (document.getElementById("details-hero") || document.querySelector(".featured-hero")).clientWidth || window.innerWidth || 1280; } catch { return 1280; } })();
-    try {
-      const images = await fetchTitleImages(type, id);
-      const filePath = selectPreferredImage(images, true);
-      if (filePath) {
-        // Check if it's a backdrop by seeing if it exists in the backdrops array
-        const backs = Array.isArray(images?.backdrops) ? images.backdrops : [];
-        const isBackdrop = backs.some(b => b.file_path === filePath);
-        backdropUrl = isBackdrop ? bestBackdropForSize(filePath, heroWidth) : img.poster(filePath);
-      }
-    } catch {}
-    if (!backdropUrl) {
-      backdropUrl = details.backdrop_path ? bestBackdropForSize(details.backdrop_path, heroWidth)
-        : (details.poster_path ? img.poster(details.poster_path) : "");
-    }
-    const runtimeOrEps = formatRuntimeOrEpisodes(details, type);
-
+    const { title, year, rating, backdropUrl, runtimeOrEps, details } = data;
+    
     if (myToken !== currentDetailsToken) return;
+    
     const bgEl = hero.querySelector(".featured-hero-bg");
     if (bgEl) {
       bgEl.classList.remove("slide-enter");
@@ -122,85 +228,53 @@ export async function startDetailsPage() {
     }
 
     try { document.title = `${title} (${year || ''}) - Movie Night`.trim(); } catch {}
-
-    try {
-      const region = detectRegion();
-      const providers = await fetchWatchProviders(type, id, region);
-      if (myToken !== currentDetailsToken) return;
-      if (Array.isArray(providers) && providers.length) renderProviderIcons(providers, hero);
-      updateProviderMetaTags(providers);
-    } catch {}
-
-    try {
-      const trailerBtn = hero.querySelector('.watch-trailer');
-      const trailerUrl = await fetchTrailerUrl(type, id);
-      if (myToken !== currentDetailsToken) return;
-      if (trailerBtn) {
-        if (trailerUrl) {
-          try { trailerBtn.removeAttribute('disabled'); } catch {}
-          
-          trailerBtn.addEventListener('click', (e) => {
-            if (e && (e.ctrlKey || e.metaKey)) {
-              try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
-              return;
-            }
-            try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
-          }, { once: true });
-          
-          trailerBtn.addEventListener('mousedown', (e) => {
-            if (e && e.button === 1) {
-              try { e.preventDefault(); } catch {}
-            }
-          });
-          
-          trailerBtn.addEventListener('auxclick', (e) => {
-            if (!e || e.button !== 1) return;
-            try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
-          });
-        } else {
-          try { trailerBtn.setAttribute('disabled', 'true'); } catch {}
-        }
-      }
-    } catch {}
-  } catch (e) {
-    console.error("Failed to load details", e);
-    const contentEl = hero.querySelector(".featured-hero-content");
-    if (contentEl) contentEl.innerHTML = `<h3 class="featured-title">Failed to load</h3>`;
-  } finally {
-    hero.classList.remove("loading");
+  } catch (error) {
+    console.error('Failed to render details hero:', error);
   }
 }
 
-function detectRegion() {
+/**
+ * Enrich details with providers and trailer
+ * @param {HTMLElement} hero
+ * @param {string} type
+ * @param {number} id
+ * @param {number} myToken
+ * @param {number} currentDetailsToken
+ */
+async function enrichDetailsWithProviders(hero, type, id, myToken, currentDetailsToken) {
   try {
-    const locale = navigator.language || navigator.userLanguage || 'en-US';
-    const m = String(locale).match(/-([A-Za-z]{2})$/);
-    return (m && m[1] ? m[1] : 'US').toUpperCase();
-  } catch { return 'US'; }
+    const region = detectRegion();
+    const providers = await fetchWatchProviders(type, id, region);
+    if (myToken !== currentDetailsToken) return;
+    if (Array.isArray(providers) && providers.length) {
+      renderProviderIcons(providers, hero);
+      updateProviderMetaTags(providers);
+    }
+  } catch (error) {
+    console.error('Failed to fetch providers for', type, id, error);
+  }
+
+  try {
+    const trailerBtn = hero.querySelector('.watch-trailer');
+    const trailerUrl = await fetchTrailerUrl(type, id);
+    if (myToken !== currentDetailsToken) return;
+    if (trailerBtn) {
+      if (trailerUrl) {
+        attachTrailerButtonHandlers(trailerBtn, trailerUrl);
+      } else {
+        try { trailerBtn.setAttribute('disabled', 'true'); } catch {}
+      }
+    }
+  } catch (error) {
+    console.error('Failed to fetch trailer for', type, id, error);
+  }
 }
 
-async function fetchWatchProviders(type, id, region) {
-  try {
-    const data = await fetchTMDBData(`/${type}/${id}/watch/providers`, { maxRetries: 2, ttlMs: PROVIDER_CACHE_TTL_MS, signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(1500) : undefined });
-    const byRegion = data && data.results ? data.results[region] || data.results['US'] || null : null;
-    if (!byRegion) return [];
-    const pools = [];
-    if (Array.isArray(byRegion.flatrate)) pools.push(...byRegion.flatrate);
-    if (Array.isArray(byRegion.free)) pools.push(...byRegion.free);
-    if (Array.isArray(byRegion.ads)) pools.push(...byRegion.ads);
-    if (Array.isArray(byRegion.rent)) pools.push(...byRegion.rent);
-    if (Array.isArray(byRegion.buy)) pools.push(...byRegion.buy);
-    const seen = new Set();
-    const list = [];
-    pools.forEach((p) => {
-      if (!p || !p.provider_id || seen.has(p.provider_id)) return;
-      seen.add(p.provider_id);
-      list.push({ id: p.provider_id, name: p.provider_name, logo: p.logo_path });
-    });
-    return list.slice(0, MAX_PROVIDER_ICONS);
-  } catch { return []; }
-}
-
+/**
+ * Render provider icons in hero section
+ * @param {Array} providers
+ * @param {HTMLElement} hero
+ */
 function renderProviderIcons(providers, hero) {
   const container = hero.querySelector('.featured-providers');
   if (!container) return;
@@ -212,6 +286,10 @@ function renderProviderIcons(providers, hero) {
   container.innerHTML = html;
 }
 
+/**
+ * Update meta tags with provider information
+ * @param {Array} providers
+ */
 function updateProviderMetaTags(providers) {
   try {
     const head = document.head;
@@ -234,4 +312,23 @@ function updateProviderMetaTags(providers) {
       group.appendChild(meta);
     });
   } catch {}
+}
+
+// Utility Functions (Private)
+
+/**
+ * Format runtime for movies or episode count for TV shows
+ * @param {Object} details
+ * @param {string} type
+ * @returns {string}
+ */
+function formatRuntimeOrEpisodes(details, type) {
+  if (type === 'tv') {
+    if (Number.isFinite(details?.number_of_episodes) && details.number_of_episodes > 0) return `${details.number_of_episodes} Eps`;
+    if (Array.isArray(details?.episode_run_time) && Number.isFinite(details.episode_run_time[0])) return `${details.episode_run_time[0]}min`;
+    return '--';
+  }
+  const minutes = Number(details?.runtime);
+  if (!Number.isFinite(minutes) || minutes <= 0) return "--";
+  return `${Math.floor(minutes)}min`;
 }

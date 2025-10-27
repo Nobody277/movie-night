@@ -2,17 +2,94 @@
  * This is a helper for movie and tv pages and any future ones that need it.
  */
 
-import { startRuntimeTags, setupRail, getGenreName as getMovieGenreName, populateRail, startMovieCards, createMovieCard, createSkeletonCard } from "./ui.js";
-import {getPopularMoviesLast7Days,getAllMovieGenres,discoverMovies,getTopGenres,getAllTVGenres,discoverTV,getTopTVGenres,getTrendingTV, fetchTMDBData, img} from "./api.js";
-import { formatDate, selectPreferredImage } from "./utils.js";
+import { fetchTMDBData, img, getAllMovieGenres, getAllTVGenres, discoverMovies, discoverTV, getPopularMoviesLast7Days, getTopGenres, getTopTVGenres, getTrendingTV } from "./api.js";
 import { fetchTrailerUrl, fetchTitleImages } from "./media-utils.js";
-import { VIDEO_CACHE_TTL_MS, HERO_ROTATION_INTERVAL_MS, MAX_HERO_SLIDES, MAX_RAIL_ITEMS } from "./constants.js";
+import { createMovieCard, createSkeletonCard, getGenreName as getMovieGenreName, populateRail, setupRail, startMovieCards, startRuntimeTags } from "./ui.js";
+import { attachTrailerButtonHandlers, formatDate, isBackdropImage, selectPreferredImage } from "./utils.js";
 
+import { VIDEO_CACHE_TTL_MS, HERO_ROTATION_INTERVAL_MS, MAX_HERO_SLIDES, MAX_RAIL_ITEMS, VOTE_COUNT_MIN_BASIC, VOTE_COUNT_MIN_RATING_WINDOWED, VOTE_COUNT_MIN_RATING_ALLTIME, VOTE_COUNT_MIN_GRID, VOTE_AVERAGE_MIN, GENRE_DISCOVERY_PAGES, GENRE_DISCOVERY_LIMIT, MAX_DISCOVERY_PAGES, INITIAL_RAILS_COUNT, RAIL_BATCH_SIZE, GRID_LOAD_MORE_MARGIN, RAIL_LAZY_LOAD_MARGIN, GRID_CHUNK_SIZE } from "./constants.js";
+
+// Public Exports
+
+/**
+ * Initialize a catalog page according to a configuration.
+ * @param {Object} config
+ * @param {'movie'|'tv'} config.mediaType
+ * @param {() => Promise<any|null>} config.fetchFeatured
+ * @param {() => Promise<{id:number,name:string}[]|null>} config.fetchAllGenres
+ * @param {(args:Object) => Promise<any|null>} config.discover
+ * @param {(args:Object) => Promise<number[]|null>} config.getTopGenres
+ * @param {(id:number, media:'movie'|'tv') => string} [config.getGenreName]
+ */
+export async function startCatalogPage(config) {
+  setupDropdowns(config.mediaType);
+  try {
+    const sortMenu = document.getElementById('sort-menu');
+    if (sortMenu) {
+      sortMenu.setAttribute('role','menu');
+      sortMenu.querySelectorAll('.sort-option').forEach(o => o.setAttribute('role','menuitemradio'));
+    }
+    const timeMenu = document.getElementById('time-menu');
+    if (timeMenu) timeMenu.setAttribute('role','menu');
+    const genresPanel = document.getElementById('genres-panel');
+    const genresToggle = document.querySelector('.genres-toggle');
+    if (genresPanel) genresPanel.setAttribute('role','dialog');
+    if (genresToggle && genresPanel) genresToggle.setAttribute('aria-controls','genres-panel');
+  } catch {}
+  const refresh = async () => {
+    const filters = resolveFilters();
+    await startFeaturedHero(config, Object.assign({}, filters));
+    const selectedCount = Array.isArray(filters.selectedGenreIds) ? filters.selectedGenreIds.length : 0;
+    const useGrid = !!filters.mustContainAll || selectedCount <= 1;
+    if (useGrid) {
+      await renderGrid(config, Object.assign({}, filters));
+    } else {
+      await renderRails(config, Object.assign({}, filters));
+    }
+  };
+  setupControls(() => { refresh(); });
+  setupGenres(config);
+  await refresh();
+}
+
+export function createMoviesConfig() {
+  return {
+    mediaType: 'movie',
+    fetchFeatured: getPopularMoviesLast7Days,
+    fetchAllGenres: getAllMovieGenres,
+    discover: discoverMovies,
+    getTopGenres: (args) => getTopGenres(args),
+    getGenreName: (id) => defaultGetGenreName(id, 'movie')
+  };
+}
+
+export function createTVConfig() {
+  return {
+    mediaType: 'tv',
+    fetchFeatured: getTrendingTV,
+    fetchAllGenres: getAllTVGenres,
+    discover: discoverTV,
+    getTopGenres: (args) => getTopTVGenres(args),
+    getGenreName: (id) => defaultGetGenreName(id, 'tv')
+  };
+}
+
+// UI Setup Functions (Private)
+
+/**
+ * Default genre name resolver
+ * @param {number} id
+ * @param {string} media
+ * @returns {string}
+ */
 function defaultGetGenreName(id, media) {
   return getMovieGenreName(id) || '';
 }
 
-// Dropdowns for sorting and time. Needed for all pages.
+/**
+ * Set up sort and time filter dropdowns
+ * @param {string} mediaType
+ */
 function setupDropdowns(mediaType) {
   const sortGroup = document.querySelector('.sort-group');
   const sortToggle = document.querySelector('.sort-toggle');
@@ -84,7 +161,10 @@ function setupDropdowns(mediaType) {
   }
 }
 
-// Controls for applying filters, clearing filters, and toggling genres.
+/**
+ * Set up filter control buttons
+ * @param {Function} onApply
+ */
 function setupControls(onApply) {
   const clickableControls = document.querySelectorAll('.apply-filters, .clear-filters, .genres-toggle, .sort-toggle, .sort-option, .time-toggle, .time-option');
   clickableControls.forEach((el) => {
@@ -126,7 +206,10 @@ function setupControls(onApply) {
   }
 }
 
-// Genres dropdown for all pages.
+/**
+ * Set up genre filter panel
+ * @param {Object} config
+ */
 function setupGenres(config) {
   const genresToggle = document.querySelector('.genres-toggle');
   const genresPanel = document.getElementById('genres-panel');
@@ -182,9 +265,14 @@ function setupGenres(config) {
         };
         document.querySelectorAll('.genre-input').forEach((input) => { input.addEventListener('change', persistGenres); });
       }
-    } catch {}
+    } catch (error) {
+      console.error('Failed to setup genres:', error);
+    }
   })();
 
+  /**
+   * Update the genre counter badge
+   */
   function updateGenreCounter() {
     const checkedGenres = document.querySelectorAll('.genre-input:checked');
     const count = Array.from(checkedGenres).filter((el) => !el.hasAttribute('data-all-match')).length;
@@ -207,6 +295,12 @@ function setupGenres(config) {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { genresPanel.classList.remove('open'); genresToggle.setAttribute('aria-expanded', 'false'); genresToggle.focus(); } });
 }
 
+// Filter & Configuration Functions (Private)
+
+/**
+ * Resolve current filter state from UI
+ * @returns {Object}
+ */
 function resolveFilters() {
   const sortToggle = document.querySelector('.sort-toggle');
   const sortArrow = sortToggle ? sortToggle.querySelector('.sort-arrow') : null;
@@ -241,6 +335,13 @@ function resolveFilters() {
   return { sortBy, startDate, endDate, selectedGenreIds, mustContainAll };
 }
 
+/**
+ * Create a genre-specific rail section
+ * @param {number} genreId
+ * @param {string} title
+ * @param {Function} fetchFunction
+ * @returns {HTMLElement}
+ */
 function createGenreRailSection(genreId, title, fetchFunction) {
   const section = document.createElement('section');
   section.className = 'rail';
@@ -263,6 +364,14 @@ function createGenreRailSection(genreId, title, fetchFunction) {
   return section;
 }
 
+// Hero & Featured Content Functions (Private)
+
+/**
+ * Start the featured hero carousel
+ * @param {Object} config
+ * @param {Object} filters
+ * @returns {Promise<void>}
+ */
 async function startFeaturedHero(config, filters) {
   const hero = document.querySelector('.featured-hero');
   if (!hero) return;
@@ -270,8 +379,8 @@ async function startFeaturedHero(config, filters) {
     hero.classList.add('loading');
     const isRatingSort = filters.sortBy.startsWith('vote_average');
     const isAllTime = !filters.startDate && !filters.endDate;
-    const voteCountMin = isRatingSort ? (isAllTime ? 1000 : 300) : 50;
-    const strongSignals = isRatingSort ? { voteAverageGte: 7.0, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
+    const voteCountMin = isRatingSort ? (isAllTime ? VOTE_COUNT_MIN_RATING_ALLTIME : VOTE_COUNT_MIN_RATING_WINDOWED) : VOTE_COUNT_MIN_BASIC;
+    const strongSignals = isRatingSort ? { voteAverageGte: VOTE_AVERAGE_MIN, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
     const normalizeSort = (s, media) => media === 'tv' ? s.replace('primary_release_date', 'first_air_date') : s;
     const sort = normalizeSort(filters.sortBy, config.mediaType);
     const releaseDesc = config.mediaType === 'tv' ? 'first_air_date.desc' : 'primary_release_date.desc';
@@ -292,7 +401,9 @@ async function startFeaturedHero(config, filters) {
       if (visibleIds.size) {
         results = results.filter(r => !visibleIds.has(Number(r.id)));
       }
-    } catch {}
+    } catch (error) {
+      console.error('Failed to filter visible IDs:', error);
+    }
 
     results = results.slice(0, MAX_HERO_SLIDES);
     if (!results.length) { hero.style.display = 'none'; return; }
@@ -307,6 +418,11 @@ async function startFeaturedHero(config, filters) {
     const bgEl = hero.querySelector('.featured-hero-bg');
     const contentEl = hero.querySelector('.featured-hero-content');
 
+    /**
+     * Pick a random hero image for an item
+     * @param {Object} item
+     * @returns {Promise<string>}
+     */
     const pickRandomHeroImage = async (item) => {
       try {
         const mediaType = item.media_type || config.mediaType;
@@ -314,14 +430,20 @@ async function startFeaturedHero(config, filters) {
         const filePath = selectPreferredImage(images, true);
         if (filePath) {
           // Determine if it's a backdrop or poster based on aspect ratio heuristic
-          const backs = Array.isArray(images?.backdrops) ? images.backdrops : [];
-          const isBackdrop = backs.some(b => b.file_path === filePath);
+          const isBackdrop = isBackdropImage(filePath, images);
           return isBackdrop ? img.backdrop(filePath) : img.poster(filePath);
         }
-      } catch {}
+      } catch (error) {
+        console.error('Failed to pick random hero image for item', item.id, error);
+      }
       return item.backdrop_path ? img.backdrop(item.backdrop_path) : (item.poster_path ? img.poster(item.poster_path) : '');
     };
 
+    /**
+     * Render a hero slide
+     * @param {Object} item
+     * @returns {Promise<void>}
+     */
     const renderSlide = async (item) => {
       const title = item.title || item.name || 'Featured';
       const mediaType = item.media_type || config.mediaType;
@@ -368,26 +490,7 @@ async function startFeaturedHero(config, filters) {
         if (trailerBtn) {
           const trailerUrl = await fetchTrailerUrl(mediaType, item.id);
           if (trailerUrl) {
-            trailerBtn.removeAttribute('disabled');
-            
-            trailerBtn.addEventListener('click', (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
-            });
-            
-            trailerBtn.addEventListener('mousedown', (e) => {
-              if (e && e.button === 1) {
-                try { e.preventDefault(); } catch {}
-              }
-            });
-            
-            trailerBtn.addEventListener('auxclick', (e) => {
-              if (!e || e.button !== 1) return;
-              e.preventDefault();
-              e.stopPropagation();
-              try { window.open(trailerUrl, '_blank', 'noopener,noreferrer'); } catch {}
-            });
+            attachTrailerButtonHandlers(trailerBtn, trailerUrl);
           } else {
             trailerBtn.setAttribute('disabled', 'true');
           }
@@ -411,22 +514,30 @@ async function startFeaturedHero(config, filters) {
     hero.addEventListener('focusin', pause);
     hero.addEventListener('focusout', resume);
   } catch (e) {
-    console.error('Failed to start featured hero', e);
+    console.error('Failed to start featured hero for', config.mediaType, e);
     hero.style.display = 'none';
   } finally {
     hero.classList.remove('loading');
   }
 }
 
+// Data Fetching Functions (Private)
+
+/**
+ * Find base genres for rail generation
+ * @param {Object} config
+ * @param {Object} filters
+ * @returns {Promise<number[]>}
+ */
 function findBaseGenres(config, filters) {
   return (async () => {
     let base = filters.selectedGenreIds.slice(0);
     if (!base.length) {
       let data = null;
       if (!filters.startDate && !filters.endDate) {
-        data = await config.getTopGenres({ startDate: null, endDate: null, sortBy: 'vote_count.desc', pages: 2, limit: 12 });
+        data = await config.getTopGenres({ startDate: null, endDate: null, sortBy: 'vote_count.desc', pages: GENRE_DISCOVERY_PAGES, limit: GENRE_DISCOVERY_LIMIT });
       } else {
-        data = await config.getTopGenres({ startDate: filters.startDate, endDate: filters.endDate, sortBy: 'popularity.desc', pages: 2, limit: 12 });
+        data = await config.getTopGenres({ startDate: filters.startDate, endDate: filters.endDate, sortBy: 'popularity.desc', pages: GENRE_DISCOVERY_PAGES, limit: GENRE_DISCOVERY_LIMIT });
       }
       base = Array.isArray(data) ? data : [];
     }
@@ -434,23 +545,30 @@ function findBaseGenres(config, filters) {
   })();
 }
 
+/**
+ * Build a factory function for genre-specific fetchers
+ * @param {Object} config
+ * @param {Object} filters
+ * @param {Set} seenIds
+ * @returns {Function}
+ */
 function buildFetcherFactory(config, filters, seenIds) {
   const isRatingSort = filters.sortBy.startsWith('vote_average');
   const isAllTime = !filters.startDate && !filters.endDate;
-  const voteCountMin = isRatingSort ? (isAllTime ? 1000 : 300) : 50;
-  const strongSignals = isRatingSort ? { voteAverageGte: 7.0, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
+  const voteCountMin = isRatingSort ? (isAllTime ? VOTE_COUNT_MIN_RATING_ALLTIME : VOTE_COUNT_MIN_RATING_WINDOWED) : VOTE_COUNT_MIN_BASIC;
+  const strongSignals = isRatingSort ? { voteAverageGte: VOTE_AVERAGE_MIN, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
   const releaseDesc = config.mediaType === 'tv' ? 'first_air_date.desc' : 'primary_release_date.desc';
   return (gid) => async () => {
     const base = await config.discover({ sortBy: filters.sortBy, startDate: filters.startDate, endDate: filters.endDate, genreIds: [gid], page: 1, ...strongSignals });
     let list = Array.isArray(base?.results) ? base.results : [];
-    if (list.length < 20) {
+    if (list.length < MAX_RAIL_ITEMS) {
       const alt = await config.discover({ sortBy: releaseDesc, startDate: filters.startDate, endDate: filters.endDate, genreIds: [gid], page: 1 });
       const altList = Array.isArray(alt?.results) ? alt.results : [];
       const seenLocal = new Set(list.map(r => r?.id));
       list = list.concat(altList.filter(r => r && !seenLocal.has(r.id)));
     }
     
-    if (list.length < 20) {
+    if (list.length < MAX_RAIL_ITEMS) {
       const fallback = await config.discover({ sortBy: 'popularity.desc', genreIds: [gid], page: 1 });
       const fallbackList = Array.isArray(fallback?.results) ? fallback.results : [];
       const seenLocal = new Set(list.map(r => r?.id));
@@ -460,8 +578,8 @@ function buildFetcherFactory(config, filters, seenIds) {
     filtered = filtered.filter((m) => Array.isArray(m?.genre_ids) && m.genre_ids.includes(gid));
     if (seenIds && seenIds.size) filtered = filtered.filter(m => !seenIds.has(m.id));
     
-    if (filtered.length < 20) {
-      for (let page = 2; page <= 3 && filtered.length < 20; page++) {
+    if (filtered.length < MAX_RAIL_ITEMS) {
+      for (let page = 2; page <= MAX_DISCOVERY_PAGES && filtered.length < MAX_RAIL_ITEMS; page++) {
         const moreData = await config.discover({ sortBy: 'popularity.desc', genreIds: [gid], page });
         const moreList = Array.isArray(moreData?.results) ? moreData.results : [];
         const moreFiltered = moreList.filter(m => m && m.poster_path && Array.isArray(m?.genre_ids) && m.genre_ids.includes(gid));
@@ -477,6 +595,14 @@ function buildFetcherFactory(config, filters, seenIds) {
   };
 }
 
+// Rendering Functions (Private)
+
+/**
+ * Render infinite-scroll grid view
+ * @param {Object} config
+ * @param {Object} filters
+ * @returns {Promise<void>}
+ */
 async function renderGrid(config, filters) {
   const container = document.querySelector('.genre-rails');
   if (!container) return;
@@ -506,8 +632,8 @@ async function renderGrid(config, filters) {
   const clientFilterAll = isAllMatch && Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length >= 2;
   const isRatingSort = filters.sortBy.startsWith('vote_average');
   const isAllTime = !filters.startDate && !filters.endDate;
-  const voteCountMin = isRatingSort ? (isAllTime ? 1000 : 300) : 50;
-  const strongSignals = isRatingSort ? { voteAverageGte: 7.0, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
+  const voteCountMin = isRatingSort ? (isAllTime ? VOTE_COUNT_MIN_RATING_ALLTIME : VOTE_COUNT_MIN_RATING_WINDOWED) : VOTE_COUNT_MIN_BASIC;
+  const strongSignals = isRatingSort ? { voteAverageGte: VOTE_AVERAGE_MIN, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
   const genreIds = isAllMatch
     ? filters.selectedGenreIds
     : (Array.isArray(filters.selectedGenreIds) && filters.selectedGenreIds.length === 1 ? [filters.selectedGenreIds[0]] : []);
@@ -546,7 +672,7 @@ async function renderGrid(config, filters) {
     });
   };
 
-  const appendInChunks = async (items, chunkSize = 6) => {
+  const appendInChunks = async (items, chunkSize = GRID_CHUNK_SIZE) => {
     for (let i = 0; i < items.length; i += chunkSize) {
       const slice = items.slice(i, i + chunkSize);
       appendCards(slice);
@@ -568,8 +694,8 @@ async function renderGrid(config, filters) {
   };
 
   const primaryArgs = (p) => ({ sortBy, startDate: filters.startDate, endDate: filters.endDate, genreIds, page: p, ...strongSignals });
-  const popularityWindowArgs = (p) => ({ sortBy: 'popularity.desc', startDate: filters.startDate, endDate: filters.endDate, genreIds, page: p, voteCountGte: isAllMatch ? undefined : 20 });
-  const voteCountAllTimeArgs = (p) => ({ sortBy: 'vote_count.desc', genreIds, page: p, voteCountGte: 50 });
+  const popularityWindowArgs = (p) => ({ sortBy: 'popularity.desc', startDate: filters.startDate, endDate: filters.endDate, genreIds, page: p, voteCountGte: isAllMatch ? undefined : VOTE_COUNT_MIN_GRID });
+  const voteCountAllTimeArgs = (p) => ({ sortBy: 'vote_count.desc', genreIds, page: p, voteCountGte: VOTE_COUNT_MIN_BASIC });
   const popularityAllTimeArgs = (p) => ({ sortBy: 'popularity.desc', genreIds, page: p });
 
   const loadNextPage = async () => {
@@ -647,7 +773,7 @@ async function renderGrid(config, filters) {
         hasMore = page <= totalPages;
       }
     } catch (e) {
-      console.error('Failed to load grid page', e);
+      console.error('Failed to load grid page', page, 'for', config.mediaType, e);
       hasMore = false;
       clearSkeletons();
     } finally {
@@ -667,7 +793,7 @@ async function renderGrid(config, filters) {
       await loadNextPage();
       if (!hasMore) io.disconnect();
     }
-  }, { rootMargin: '1400px 0px' });
+  }, { rootMargin: GRID_LOAD_MORE_MARGIN });
   io.observe(sentinel);
 }
 
@@ -684,7 +810,7 @@ async function renderRails(config, filters) {
   const makeFetcherFactory = buildFetcherFactory(config, Object.assign({}, filters, { sortBy: normalizedSort }), seenIds);
   const makeFetcher = (gid) => makeFetcherFactory(gid);
 
-  const initial = baseGenres.slice(0, 6);
+  const initial = baseGenres.slice(0, INITIAL_RAILS_COUNT);
   initial.forEach((gid) => {
     const title = (config.getGenreName || defaultGetGenreName)(gid, config.mediaType) || 'Genre';
     const section = createGenreRailSection(gid, title, makeFetcher(gid));
@@ -699,7 +825,7 @@ async function renderRails(config, filters) {
   railsContainer.appendChild(sentinel);
   const loadMore = () => {
     if (nextIndex >= baseGenres.length) return;
-    const batch = baseGenres.slice(nextIndex, nextIndex + 4);
+    const batch = baseGenres.slice(nextIndex, nextIndex + RAIL_BATCH_SIZE);
     batch.forEach((gid) => {
       const title = (config.getGenreName || defaultGetGenreName)(gid, config.mediaType) || 'Genre';
       const section = createGenreRailSection(gid, title, makeFetcher(gid));
@@ -707,7 +833,7 @@ async function renderRails(config, filters) {
     });
     nextIndex += batch.length;
   };
-  const io = new IntersectionObserver((entries) => { if (entries.some(e => e.isIntersecting)) { loadMore(); } }, { threshold: 0, rootMargin: '1800px 0px' });
+  const io = new IntersectionObserver((entries) => { if (entries.some(e => e.isIntersecting)) { loadMore(); } }, { threshold: 0, rootMargin: RAIL_LAZY_LOAD_MARGIN });
   io.observe(sentinel);
 
   const mo = new MutationObserver(() => {
@@ -720,67 +846,4 @@ async function renderRails(config, filters) {
 
   startMovieCards();
   startRuntimeTags();
-}
-
-/**
- * Initialize a catalog page according to a configuration.
- * @param {Object} config
- * @param {'movie'|'tv'} config.mediaType
- * @param {() => Promise<any|null>} config.fetchFeatured
- * @param {() => Promise<{id:number,name:string}[]|null>} config.fetchAllGenres
- * @param {(args:Object) => Promise<any|null>} config.discover
- * @param {(args:Object) => Promise<number[]|null>} config.getTopGenres
- * @param {(id:number, media:'movie'|'tv') => string} [config.getGenreName]
- */
-export async function startCatalogPage(config) {
-  setupDropdowns(config.mediaType);
-  try {
-    const sortMenu = document.getElementById('sort-menu');
-    if (sortMenu) {
-      sortMenu.setAttribute('role','menu');
-      sortMenu.querySelectorAll('.sort-option').forEach(o => o.setAttribute('role','menuitemradio'));
-    }
-    const timeMenu = document.getElementById('time-menu');
-    if (timeMenu) timeMenu.setAttribute('role','menu');
-    const genresPanel = document.getElementById('genres-panel');
-    const genresToggle = document.querySelector('.genres-toggle');
-    if (genresPanel) genresPanel.setAttribute('role','dialog');
-    if (genresToggle && genresPanel) genresToggle.setAttribute('aria-controls','genres-panel');
-  } catch {}
-  const refresh = async () => {
-    const filters = resolveFilters();
-    await startFeaturedHero(config, Object.assign({}, filters));
-    const selectedCount = Array.isArray(filters.selectedGenreIds) ? filters.selectedGenreIds.length : 0;
-    const useGrid = !!filters.mustContainAll || selectedCount <= 1;
-    if (useGrid) {
-      await renderGrid(config, Object.assign({}, filters));
-    } else {
-      await renderRails(config, Object.assign({}, filters));
-    }
-  };
-  setupControls(() => { refresh(); });
-  setupGenres(config);
-  await refresh();
-}
-
-export function createMoviesConfig() {
-  return {
-    mediaType: 'movie',
-    fetchFeatured: getPopularMoviesLast7Days,
-    fetchAllGenres: getAllMovieGenres,
-    discover: discoverMovies,
-    getTopGenres: (args) => getTopGenres(args),
-    getGenreName: (id) => defaultGetGenreName(id, 'movie')
-  };
-}
-
-export function createTVConfig() {
-  return {
-    mediaType: 'tv',
-    fetchFeatured: getTrendingTV,
-    fetchAllGenres: getAllTVGenres,
-    discover: discoverTV,
-    getTopGenres: (args) => getTopTVGenres(args),
-    getGenreName: (id) => defaultGetGenreName(id, 'tv')
-  };
 }

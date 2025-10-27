@@ -1,8 +1,9 @@
 let instance = null;
 
-// Start the background animation... duh.
-// It's a 2d wireframe grid with a wave animation. Cause Ian didn't like the sperm animation.
-// Read about the code here p5js.org cause i'm not gonna explain it.
+/**
+ * Initializes the p5.js background animation with a 2D wireframe grid and wave effect
+ * @returns {void}
+ */
 export function startBackground() {
   if (!window.p5 || instance) return;
 
@@ -122,7 +123,10 @@ export function startBackground() {
   window.p5Instance = instance;
 }
 
-// Helper to kill the background.
+/**
+ * Cleans up and removes the p5.js background animation instance
+ * @returns {void}
+ */
 export function destroyBackground() {
   try {
     if (instance && typeof instance.remove === 'function') {

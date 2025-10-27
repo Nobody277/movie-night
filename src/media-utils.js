@@ -5,11 +5,11 @@
  */
 
 import { fetchTMDBData } from './api.js';
-import { VIDEO_CACHE_TTL_MS, LONG_CACHE_TTL_MS, MAX_RETRIES } from './constants.js';
 
-// YouTube trailer fetcher. Because who doesn't want to watch a 2-minute trailer before committing to a 2-hour movie?
+import { LONG_CACHE_TTL_MS, MAX_RETRIES, VIDEO_CACHE_TTL_MS } from './constants.js';
+
 /**
- * Fetch YouTube trailer URL for a movie or TV show.
+ * Fetch YouTube trailer URL for a movie or TV show
  * Prioritizes: trailer > teaser > clip
  * @param {('movie'|'tv')} type - Media type
  * @param {number|string} id - TMDB id
@@ -61,4 +61,3 @@ export async function fetchTitleImages(type, id) {
     return null;
   }
 }
-

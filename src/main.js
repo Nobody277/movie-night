@@ -1,12 +1,13 @@
 import "./style.css";
-import { startBackground, destroyBackground } from "./background.js";
 import { fetchTMDBData, img } from "./api.js";
-import { startRuntimeTags, getGenreName, setupRail, startMovieCards, disposeUI, createMovieCard } from "./ui.js";
+import { startBackground, destroyBackground } from "./background.js";
 import { startHomePage } from "./home.js";
 import { startMoviesPage } from "./movies.js";
 import { startTVPage } from "./tv.js";
-import { sleep } from "./utils.js";
-import { PAGE_TRANSITION_DURATION_MS, SEARCH_DEBOUNCE_MS, MAX_SEARCH_RESULTS } from "./constants.js";
+import { startRuntimeTags, getGenreName, setupRail, startMovieCards, disposeUI, createMovieCard } from "./ui.js";
+import { sleep, prettyUrlToFile, fileUrlToPretty } from "./utils.js";
+
+import { PAGE_TRANSITION_DURATION_MS, SEARCH_DEBOUNCE_MS, MAX_SEARCH_RESULTS, CARD_WIDTH_PX, DEFAULT_CONTAINER_WIDTH_PX, MIN_SKELETON_COUNT, MAX_SKELETON_COUNT_SEARCH, MIN_SEARCH_QUERY_LENGTH, TRUNCATION_THRESHOLD_PX, SEARCH_RESULT_GENRE_LIMIT } from "./constants.js";
 
 if (typeof document !== 'undefined') {
   const removeNoFouc = () => document.body && document.body.classList.remove('no-fouc');
@@ -17,6 +18,11 @@ if (typeof document !== 'undefined') {
   }
 }
 
+// Utility Functions
+
+/**
+ * Updates site icons (favicon, OG image, etc.)
+ */
 function updateSiteIcons() {
   try {
     const faviconUrl = './movienight.svg';
@@ -37,7 +43,10 @@ function updateSiteIcons() {
   } catch {}
 }
 
-// Screen reader stuff for screen readers yk those people...
+/**
+ * Announces a message to screen readers via live region
+ * @param {string} message
+ */
 function announce(message) {
   try {
     let region = document.getElementById('sr-live-region');
@@ -53,12 +62,23 @@ function announce(message) {
   } catch {}
 }
 
+// PageTransition Class
+
+/**
+ * Handles smooth page transitions without full page reloads
+ */
 class PageTransition {
+  /**
+   * Initialize the page transition system
+   */
   constructor() {
     this.isTransitioning = false;
     this.start();
   }
 
+  /**
+   * Set up the transition system
+   */
   start() {
     this.createLoadingOverlay();
     this.wrapMainContent();
@@ -66,6 +86,9 @@ class PageTransition {
     this.handleHistoryNavigation();
   }
 
+  /**
+   * Create the loading overlay element
+   */
   createLoadingOverlay() {
     const overlay = document.createElement('div');
     overlay.className = 'page-loading-overlay';
@@ -73,6 +96,9 @@ class PageTransition {
     this.overlay = overlay;
   }
 
+  /**
+   * Wrap page content in a transition container
+   */
   wrapMainContent() {
     const body = document.body;
     const container = document.createElement('div');
@@ -90,6 +116,9 @@ class PageTransition {
     this.container = container;
   }
 
+  /**
+   * Bind click handlers for internal navigation
+   */
   bindNavigationEvents() {
     if (this._navBound) return;
     this._navBound = true;
@@ -108,6 +137,9 @@ class PageTransition {
     }, { capture: true });
   }
 
+  /**
+   * Handle browser back/forward navigation
+   */
   handleHistoryNavigation() {
     window.addEventListener('popstate', (e) => {
       const path = window.location.pathname;
@@ -116,7 +148,68 @@ class PageTransition {
   }
 
   /**
-   * Takes you to a magical new page with a fade transition.
+   * Fetch page content from URL
+   * @param {string} url
+   * @returns {Promise<{doc: Document, fileUrl: string}>}
+   */
+  async fetchPageContent(url) {
+    const targetUrl = prettyUrlToFile(url);
+    const response = await fetch(targetUrl);
+    const html = await response.text();
+    const parser = new DOMParser();
+    return { doc: parser.parseFromString(html, 'text/html'), fileUrl: targetUrl };
+  }
+
+  /**
+   * Resolve the pretty URL to push to history
+   * @param {string} url - Original URL
+   * @param {string} targetUrl - File URL
+   * @returns {string}
+   */
+  resolveHistoryUrl(url, targetUrl) {
+    let pretty = fileUrlToPretty(targetUrl);
+    try {
+      const original = String(url || '');
+      if (original === '/' || original === '/home') {
+        pretty = '/movie-night';
+      } else if (original === '/movies') {
+        pretty = '/movie-night/movies';
+      } else if (original === '/tv' || original.endsWith('/tv') || original === 'tv') {
+        pretty = '/movie-night/tv';
+      } else if (original.startsWith('/movies/movie:') || original.startsWith('movies/movie:') || original.startsWith('/movie-night/movies/movie:')) {
+        const prefixed = original.startsWith('/movie-night') ? original.slice('/movie-night'.length) : (original.startsWith('/') ? original : `/${original}`);
+        pretty = `/movie-night${prefixed}`;
+      } else if (original.startsWith('/tv/tv:') || original.startsWith('tv/tv:') || original.startsWith('/movie-night/tv/tv:')) {
+        const prefixed = original.startsWith('/movie-night') ? original.slice('/movie-night'.length) : (original.startsWith('/') ? original : `/${original}`);
+        pretty = `/movie-night${prefixed}`;
+      } else if (original === '/search' || original.endsWith('/search') || original === 'search' || original.startsWith('/search?')) {
+        pretty = original.startsWith('/search?') ? `/movie-night${original}` : '/movie-night/search';
+      } else if (original === '/my-list' || original.endsWith('/my-list') || original === 'my-list') {
+        pretty = '/movie-night/my-list';
+      }
+    } catch {}
+    return pretty;
+  }
+
+  /**
+   * Perform transition sequence with callback
+   * @param {Function} callback
+   * @returns {Promise<void>}
+   */
+  async performTransitionSequence(callback) {
+    this.container.classList.add('page-transitioning');
+    this.overlay.classList.add('active');
+    await this.wait(PAGE_TRANSITION_DURATION_MS);
+    
+    await callback();
+    
+    await this.wait(PAGE_TRANSITION_DURATION_MS);
+    this.overlay.classList.remove('active');
+    this.container.classList.remove('page-transitioning');
+  }
+
+  /**
+   * Navigate to a new page with transition
    * @param {string} url 
    * @param {boolean} pushHistory 
    * @returns {Promise<void>}
@@ -127,84 +220,31 @@ class PageTransition {
     this.isTransitioning = true;
     
     try {
-      this.container.classList.add('page-transitioning');
-      this.overlay.classList.add('active');
-      
-      await this.wait(PAGE_TRANSITION_DURATION_MS);
-
-      const prettyToFile = (u) => {
-        if (!u) return 'index.html';
-        let p = String(u || '');
-        if (p.startsWith('/movie-night')) p = p.slice('/movie-night'.length);
-        if (!p.startsWith('/')) p = '/' + p;
-        if (p === '/' || p === '/home' || p === 'home' || p === '/index.html' || p === 'index.html') return 'index.html';
-        if (p === '/movies' || p === 'movies') return 'movies.html';
-        if (p.startsWith('/movies/movie:')) return 'details.html';
-        if (p.startsWith('/tv/tv:')) return 'details.html';
-        if (p === '/tv' || p === 'tv') return 'tv.html';
-        if (p === '/search' || p === 'search' || p.startsWith('/search?') || p.startsWith('search?')) return 'search.html' + (p.includes('?') ? p.slice(p.indexOf('?')) : '');
-        if (p === '/my-list' || p === 'my-list') return 'index.html';
-        if (u.includes('.html')) return u;
-        return u;
-      };
-      const fileToPretty = (u) => {
-        if (u.includes('movies.html')) return '/movie-night/movies';
-        if (u.includes('index.html')) return '/movie-night/';
-        if (u.includes('details.html')) return window.location.pathname || '/movie-night/movies';
-        if (u.includes('tv.html')) return '/movie-night/tv';
-        if (u.includes('search.html')) return '/movie-night/search' + (u.includes('?') ? u.slice(u.indexOf('?')) : '');
-        return u.startsWith('/') ? u : `/${u}`;
-      };
-
-      const targetUrl = prettyToFile(url);
-      const response = await fetch(targetUrl);
-      const html = await response.text();
-      
-      const parser = new DOMParser();
-      const newDoc = parser.parseFromString(html, 'text/html');
-      
-      this.updatePageContent(newDoc);
-      
-      if (pushHistory) {
-        let pretty = fileToPretty(targetUrl);
-        try {
-          const original = String(url || '');
-          if (original === '/tv' || original.endsWith('/tv') || original === 'tv') {
-            pretty = '/movie-night/tv';
-          } else if (original.startsWith('/movies/movie:') || original.startsWith('movies/movie:') || original.startsWith('/movie-night/movies/movie:')) {
-            const prefixed = original.startsWith('/movie-night') ? original.slice('/movie-night'.length) : (original.startsWith('/') ? original : `/${original}`);
-            pretty = `/movie-night${prefixed}`;
-          } else if (original.startsWith('/tv/tv:') || original.startsWith('tv/tv:') || original.startsWith('/movie-night/tv/tv:')) {
-            const prefixed = original.startsWith('/movie-night') ? original.slice('/movie-night'.length) : (original.startsWith('/') ? original : `/${original}`);
-            pretty = `/movie-night${prefixed}`;
-          } else if (original === '/search' || original.endsWith('/search') || original === 'search' || original.startsWith('/search?')) {
-            pretty = original.startsWith('/search?') ? `/movie-night${original}` : '/movie-night/search';
-          }
-        } catch {}
-        window.history.pushState(null, '', pretty);
-      }
-      
-      await this.wait(PAGE_TRANSITION_DURATION_MS);
-      
-      this.overlay.classList.remove('active');
-      this.container.classList.remove('page-transitioning');
-      
-      this.reinitializePageFeatures();
-      
+      await this.performTransitionSequence(async () => {
+        const { doc: newDoc, fileUrl: targetUrl } = await this.fetchPageContent(url);
+        
+        this.updatePageContent(newDoc);
+        
+        if (pushHistory) {
+          const pretty = this.resolveHistoryUrl(url, targetUrl);
+          window.history.pushState(null, '', pretty);
+        }
+        
+        this.reinitializePageFeatures();
+      });
     } catch (error) {
-      console.error('Page transition failed:', error);
+      console.error('Page transition failed for URL:', url, error);
       window.location.href = url;
+    } finally {
+      this.isTransitioning = false;
     }
-    
-    this.isTransitioning = false;
   }
 
   /**
-   * Updates page content...
-   * @param {Document} newDoc - Parsed HTML document. If you give me raw html I will kill you.
+   * Updates page content with new document
+   * @param {Document} newDoc - Parsed HTML document
    */
   updatePageContent(newDoc) {
-    // Updating stuff so lets delete the old stuff and not make memory leaks Mhm.
     try { disposeUI(); } catch {}
     document.title = newDoc.title;
     
@@ -252,6 +292,9 @@ class PageTransition {
     } catch {}
   }
 
+  /**
+   * Reinitialize page-specific features after transition
+   */
   reinitializePageFeatures() {
     startSearchFunctionality();
     try {
@@ -283,6 +326,8 @@ class PageTransition {
           placeholder.placeholder = 'Search TV shows, movies...';
         }
       } catch {}
+    } else if (path.includes('/my-list')) {
+      import('./my-list.js').then(m => m.startMyListPage && m.startMyListPage());
     } else if (path.includes('/search')) {
       startSearchPage();
     }
@@ -293,6 +338,9 @@ class PageTransition {
     this.bindNavigationEvents();
   }
 
+  /**
+   * Restart the p5.js background animation
+   */
   reinitializeP5Animation() {
     if (window.p5) {
       try { destroyBackground(); } catch {}
@@ -300,10 +348,17 @@ class PageTransition {
     }
   }
 
-  wait(ms) { // Guess what this does. You get a cookie if you figure it out. (Hint: it's just sleep with a fancy name)
+  /**
+   * Wait for a specified duration
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
+  wait(ms) {
     return sleep(ms);
   }
 }
+
+// Page Initialization
 
 const pageTransition = new PageTransition();
 try { window.pageTransition = pageTransition; } catch {}
@@ -314,7 +369,7 @@ try { window.pageTransition = pageTransition; } catch {}
     if (path.startsWith('/movie-night')) path = path.slice('/movie-night'.length) || '/';
     if (path.startsWith('//')) path = path.slice(1);
     if (!path.startsWith('/')) path = '/' + path;
-    const shouldPretty = path === '/' || path === '/home' || path === '/index.html' || path === '/movies' || path === '/tv' || path.startsWith('/movies/movie:') || path.startsWith('/tv/tv:') || path.startsWith('/search');
+    const shouldPretty = path === '/' || path === '/home' || path === '/index.html' || path === '/movies' || path === '/tv' || path === '/my-list' || path.startsWith('/movies/movie:') || path.startsWith('/tv/tv:') || path.startsWith('/search');
     if (shouldPretty) {
       const pretty = `/movie-night${path}`;
       try { window.history.replaceState(null, '', pretty); } catch {}
@@ -327,6 +382,9 @@ try { window.pageTransition = pageTransition; } catch {}
   pageTransition.reinitializePageFeatures();
 })();
 
+/**
+ * Initialize search box functionality
+ */
 function startSearchFunctionality() {
   const searchToggle = document.querySelector('.search-toggle');
   const searchBox = document.querySelector('.search-box');
@@ -336,7 +394,6 @@ function startSearchFunctionality() {
   let closeSearchResults = () => {};
 
   if (searchToggle && searchBox && searchInput) {
-    // We are just gonna turn off auto complete cause its annoying.
     try {
       searchInput.setAttribute('autocomplete', 'off');
       searchInput.setAttribute('spellcheck', 'false');
@@ -388,7 +445,7 @@ function startSearchFunctionality() {
     let items = [];
 
     const doSearch = async (q) => {
-      if (!q || q.trim().length < 2) { renderResults([]); return; }
+      if (!q || q.trim().length < MIN_SEARCH_QUERY_LENGTH) { renderResults([]); return; }
       try {
         const data = await fetchTMDBData(`/search/multi?query=${encodeURIComponent(q)}&include_adult=false`);
         let results = Array.isArray(data?.results) ? data.results : [];
@@ -417,7 +474,7 @@ function startSearchFunctionality() {
         const titles = resultsEl.querySelectorAll('.search-title');
         titles.forEach((t) => {
           t.removeAttribute('title');
-          const isTruncated = t.scrollHeight > t.clientHeight + 1;
+          const isTruncated = t.scrollHeight > t.clientHeight + TRUNCATION_THRESHOLD_PX;
           if (isTruncated) t.setAttribute('title', t.textContent || '');
         });
       });
@@ -459,7 +516,7 @@ function startSearchFunctionality() {
       const title = r.title || r.name || '';
       const year = (r.release_date || r.first_air_date) ? new Date(r.release_date || r.first_air_date).getFullYear() : '';
       const rating = typeof r.vote_average === 'number' ? r.vote_average.toFixed(1) : null;
-      const genres = Array.isArray(r.genre_ids) ? r.genre_ids.slice(0, 2).map(id => getGenreName(id)).filter(Boolean).join(', ') : '';
+      const genres = Array.isArray(r.genre_ids) ? r.genre_ids.slice(0, SEARCH_RESULT_GENRE_LIMIT).map(id => getGenreName(id)).filter(Boolean).join(', ') : '';
       return `
         <div class="search-item" role="option">
           <img class="search-thumb" src="${poster}" alt="" loading="lazy" />
@@ -524,17 +581,25 @@ if (window.p5) {
   pageTransition.reinitializeP5Animation();
 }
 
+/**
+ * Initialize the search results page
+ */
 function startSearchPage() {
   const urlParams = new URLSearchParams(window.location.search);
   const query = urlParams.get('q');
   if (query) performSearch(query);
 }
 
+/**
+ * Perform search and render results
+ * @param {string} query
+ * @returns {Promise<void>}
+ */
 async function performSearch(query) {
   const grid = document.getElementById('search-results-grid');
   if (!grid) return;
   grid.innerHTML = '';
-  const skeletonCount = Math.min(12, Math.max(6, Math.floor((grid.clientWidth || 800) / 190)));
+  const skeletonCount = Math.min(MAX_SKELETON_COUNT_SEARCH, Math.max(MIN_SKELETON_COUNT, Math.floor((grid.clientWidth || DEFAULT_CONTAINER_WIDTH_PX) / CARD_WIDTH_PX)));
   for (let i = 0; i < skeletonCount; i++) {
     const skel = document.createElement('article');
     skel.className = 'movie-card skeleton';
@@ -557,7 +622,7 @@ async function performSearch(query) {
     startMovieCards();
     startRuntimeTags();
   } catch (error) {
-    console.error('Search failed:', error);
+    console.error('Search failed for query:', query, error);
     grid.innerHTML = '<div class="error">Search failed. Please try again.</div>';
   }
 }
