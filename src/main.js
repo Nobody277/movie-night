@@ -1,4 +1,5 @@
 import "./style.css";
+import "./popup-blocker.js";
 import { fetchTMDBData, img } from "./api.js";
 import { startBackground, destroyBackground } from "./background.js";
 import { startHomePage } from "./home.js";

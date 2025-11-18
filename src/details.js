@@ -83,6 +83,17 @@ async function fetchDetailsData(type, id) {
     const details = await fetchTMDBData(endpoint);
     if (!details) throw new Error("Missing details");
 
+    if (type === 'tv') {
+      try {
+        const externalIds = await fetchTMDBData(`/tv/${id}/external_ids`);
+        if (externalIds) {
+          details.external_ids = externalIds;
+        }
+      } catch (error) {
+        console.error('Failed to fetch external IDs:', error);
+      }
+    }
+
     const title = details.title || details.name || "Untitled";
     const year = formatYear(details.release_date || details.first_air_date);
     const rating = typeof details.vote_average === "number" ? details.vote_average.toFixed(1) : null;
@@ -225,6 +236,11 @@ function renderDetailsHero(hero, data, type, myToken, currentDetailsToken) {
         </div>`;
       if (myToken !== currentDetailsToken) return;
       contentEl.classList.add("slide-enter");
+      
+      const watchNowBtn = contentEl.querySelector('.watch-now');
+      if (watchNowBtn) {
+        attachWatchNowHandler(watchNowBtn, type, details);
+      }
     }
 
     try { document.title = `${title} (${year || ''}) - Movie Night`.trim(); } catch {}
@@ -331,4 +347,103 @@ function formatRuntimeOrEpisodes(details, type) {
   const minutes = Number(details?.runtime);
   if (!Number.isFinite(minutes) || minutes <= 0) return "--";
   return `${Math.floor(minutes)}min`;
+}
+
+/**
+ * Attach Watch Now button handler
+ * @param {HTMLElement} btn
+ * @param {string} type
+ * @param {Object} details
+ */
+function attachWatchNowHandler(btn, type, details) {
+  if (!btn) return;
+  
+  btn.addEventListener('click', async () => {
+    try {
+      let embedUrl = '';
+      
+      if (type === 'movie') {
+        // For movies, use TMDB ID
+        const tmdbId = details.id;
+        embedUrl = `https://vidsrc.cc/v2/embed/movie/${tmdbId}?autoPlay=false`;
+      } else if (type === 'tv') {
+        // For TV shows, we need IMDB ID
+        const imdbId = details.external_ids?.imdb_id;
+        if (imdbId) {
+          embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}?autoPlay=false`;
+        } else {
+          console.error('No IMDB ID found for TV show');
+          return;
+        }
+      }
+      
+      if (embedUrl) {
+        openPlayerModal(embedUrl);
+      }
+    } catch (error) {
+      console.error('Failed to open player:', error);
+    }
+  });
+}
+
+/**
+ * Open player modal with embed URL
+ * @param {string} embedUrl
+ */
+function openPlayerModal(embedUrl) {
+  // Create modal overlay
+  const modal = document.createElement('div');
+  modal.className = 'player-modal';
+  modal.innerHTML = `
+    <div class="player-modal-overlay"></div>
+    <div class="player-modal-content">
+      <button class="player-modal-close" aria-label="Close player">&times;</button>
+      <iframe 
+        src="${embedUrl}" 
+        frameborder="0"
+        allowfullscreen
+        sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"
+        allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+        class="player-iframe"
+        referrerpolicy="no-referrer"
+      ></iframe>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+  
+  // Block popup attempts
+  const iframe = modal.querySelector('.player-iframe');
+  iframe.addEventListener('load', () => {
+    try {
+      // Prevent the iframe from opening new windows
+      if (iframe.contentWindow) {
+        const originalOpen = iframe.contentWindow.open;
+        iframe.contentWindow.open = function() {
+          console.log('Blocked popup attempt from embedded player');
+          return null;
+        };
+      }
+    } catch (e) {
+      // Cross-origin restriction - sandbox will handle it
+      console.log('Iframe sandboxed - popups blocked by browser');
+    }
+  });
+  
+  const closeModal = () => {
+    modal.remove();
+    document.body.style.overflow = '';
+  };
+  
+  modal.querySelector('.player-modal-close').addEventListener('click', closeModal);
+  modal.querySelector('.player-modal-overlay').addEventListener('click', closeModal);
+  
+  const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      document.removeEventListener('keydown', handleEsc);
+    }
+  };
+  document.addEventListener('keydown', handleEsc);
 }

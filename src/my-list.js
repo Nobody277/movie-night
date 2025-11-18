@@ -314,7 +314,7 @@ function renderList(list, container, isCustom) {
  * @param {Object} data
  * @returns {string}
  */
-function generatePreview(data) {
+function generatePreview(data) { // Security Risk: This function is used to generate a preview of imported lists. It is not sanitized and can be used to inject HTML into the page.
   let html = '<ul class="preview-list">';
   
   if (data.lists) {

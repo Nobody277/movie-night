@@ -9,6 +9,115 @@ import { attachTrailerButtonHandlers, formatDate, isBackdropImage, selectPreferr
 
 import { VIDEO_CACHE_TTL_MS, HERO_ROTATION_INTERVAL_MS, MAX_HERO_SLIDES, MAX_RAIL_ITEMS, VOTE_COUNT_MIN_BASIC, VOTE_COUNT_MIN_RATING_WINDOWED, VOTE_COUNT_MIN_RATING_ALLTIME, VOTE_COUNT_MIN_GRID, VOTE_AVERAGE_MIN, GENRE_DISCOVERY_PAGES, GENRE_DISCOVERY_LIMIT, MAX_DISCOVERY_PAGES, INITIAL_RAILS_COUNT, RAIL_BATCH_SIZE, GRID_LOAD_MORE_MARGIN, RAIL_LAZY_LOAD_MARGIN, GRID_CHUNK_SIZE } from "./constants.js";
 
+// Helper Functions for Watch Now
+
+/**
+ * Attach Watch Now button handler
+ * @param {HTMLElement} btn
+ * @param {string} type
+ * @param {Object} item
+ */
+function attachWatchNowHandler(btn, type, item) {
+  if (!btn) return;
+  
+  btn.addEventListener('click', async () => {
+    try {
+      let embedUrl = '';
+      
+      if (type === 'movie') {
+        // For movies, use TMDB ID
+        const tmdbId = item.id;
+        embedUrl = `https://vidsrc.cc/v2/embed/movie/${tmdbId}?autoPlay=false`;
+      } else if (type === 'tv') {
+        // For TV shows, we need IMDB ID
+        try {
+          const externalIds = await fetchTMDBData(`/tv/${item.id}/external_ids`);
+          const imdbId = externalIds?.imdb_id;
+          if (imdbId) {
+            embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}?autoPlay=false`;
+          } else {
+            console.error('No IMDB ID found for TV show');
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to fetch IMDB ID:', error);
+          return;
+        }
+      }
+      
+      if (embedUrl) {
+        openPlayerModal(embedUrl);
+      }
+    } catch (error) {
+      console.error('Failed to open player:', error);
+    }
+  });
+}
+
+/**
+ * Open player modal with embed URL
+ * @param {string} embedUrl
+ */
+function openPlayerModal(embedUrl) {
+  // Create modal overlay
+  const modal = document.createElement('div');
+  modal.className = 'player-modal';
+  modal.innerHTML = `
+    <div class="player-modal-overlay"></div>
+    <div class="player-modal-content">
+      <button class="player-modal-close" aria-label="Close player">&times;</button>
+      <iframe 
+        src="${embedUrl}" 
+        frameborder="0" 
+        allowfullscreen 
+        sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"
+        allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+        class="player-iframe"
+        referrerpolicy="no-referrer"
+      ></iframe>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+  
+  // Block popup attempts
+  const iframe = modal.querySelector('.player-iframe');
+  iframe.addEventListener('load', () => {
+    try {
+      // Prevent the iframe from opening new windows
+      if (iframe.contentWindow) {
+        const originalOpen = iframe.contentWindow.open;
+        iframe.contentWindow.open = function() {
+          console.log('Blocked popup attempt from embedded player');
+          return null;
+        };
+      }
+    } catch (e) {
+      // Cross-origin restriction - sandbox will handle it
+      console.log('Iframe sandboxed - popups blocked by browser');
+    }
+  });
+  
+  // Close handlers
+  const closeModal = () => {
+    modal.remove();
+    document.body.style.overflow = '';
+  };
+  
+  modal.querySelector('.player-modal-close').addEventListener('click', closeModal);
+  modal.querySelector('.player-modal-overlay').addEventListener('click', closeModal);
+  
+  // ESC key to close
+  const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      document.removeEventListener('keydown', handleEsc);
+    }
+  };
+  document.addEventListener('keydown', handleEsc);
+}
+
 // Public Exports
 
 /**
@@ -485,6 +594,12 @@ async function startFeaturedHero(config, filters) {
             <button class=\"btn watch-trailer\" type=\"button\">Watch Trailer</button>
           </div>`;
         contentEl.classList.add('slide-enter');
+        
+        // Attach Watch Now handler
+        const watchNowBtn = contentEl.querySelector('.watch-now');
+        if (watchNowBtn) {
+          attachWatchNowHandler(watchNowBtn, mediaType, item);
+        }
         
         const trailerBtn = contentEl.querySelector('.watch-trailer');
         if (trailerBtn) {
