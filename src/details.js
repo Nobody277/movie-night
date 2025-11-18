@@ -421,28 +421,25 @@ function openPlayerModal(embedUrl) {
       if (iframe.contentWindow) {
         const originalOpen = iframe.contentWindow.open;
         iframe.contentWindow.open = function() {
-          console.log('Blocked popup attempt from embedded player');
           return null;
         };
       }
     } catch (e) {
-      // Cross-origin restriction - sandbox will handle it
-      console.log('Iframe sandboxed - popups blocked by browser');
     }
   });
   
   const closeModal = () => {
     modal.remove();
     document.body.style.overflow = '';
+    document.removeEventListener('keydown', handleEsc);
   };
   
+  // Only close button closes the modal (not clicking outside)
   modal.querySelector('.player-modal-close').addEventListener('click', closeModal);
-  modal.querySelector('.player-modal-overlay').addEventListener('click', closeModal);
   
   const handleEsc = (e) => {
     if (e.key === 'Escape') {
       closeModal();
-      document.removeEventListener('keydown', handleEsc);
     }
   };
   document.addEventListener('keydown', handleEsc);

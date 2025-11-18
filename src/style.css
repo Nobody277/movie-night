@@ -1482,13 +1482,14 @@ canvas.p5Canvas {
   border: 1px solid rgba(255,255,255,0.18);
   border-radius: 8px;
   color: var(--text);
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1;
   cursor: pointer;
   z-index: 10;
   transition: background-color 120ms ease, border-color 120ms ease;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  padding: 0;
 }
 
 .player-modal-close:hover {
@@ -1513,7 +1514,7 @@ canvas.p5Canvas {
     width: 36px;
     height: 36px;
     top: 12px;
-    right: 12px;
-    font-size: 24px;
+    right: 60px;
+    font-size: 20px;
   }
 }
