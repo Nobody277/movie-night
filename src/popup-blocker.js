@@ -14,23 +14,6 @@ window.open = function(...args) {
   return null;
 };
 
-let userInitiatedNavigation = false;
-
-document.addEventListener('click', (e) => {
-  const link = e.target.closest('a');
-  if (link && link.href && !link.href.startsWith('javascript:')) {
-    userInitiatedNavigation = true;
-    setTimeout(() => { userInitiatedNavigation = false; }, 1000);
-  }
-}, true);
-
-window.addEventListener('beforeunload', (e) => {
-  if (!userInitiatedNavigation) {
-    e.preventDefault();
-    e.returnValue = '';
-  }
-}, true);
-
 // Block focus stealing
 let lastFocusTime = Date.now();
 window.addEventListener('blur', () => {
