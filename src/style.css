@@ -942,11 +942,51 @@ canvas.p5Canvas {
 
   .container { padding: 0 12px; }
 
-  .header-row { padding: 10px 0; }
-  .nav-link { font-size: 13px; padding: 6px 6px; }
+  .header-row { 
+    padding: 10px 0;
+    grid-template-columns: 1fr;
+  }
+  
+  .logo {
+    display: none;
+  }
+  
+  .main-nav {
+    justify-self: center;
+  }
+  
+  .nav-link { 
+    font-size: 13px; 
+    padding: 6px 8px;
+  }
 
-  .search-box { max-width: calc(100vw - 24px); }
-  .search-box.active { width: min(240px, calc(100vw - 24px)); }
+  .nav-list {
+    position: relative;
+  }
+  
+  .search-container {
+    position: static;
+  }
+  
+  .search-box { 
+    max-width: calc(100vw - 24px);
+    position: absolute;
+    right: 0;
+    top: 0;
+    margin-left: 0;
+    z-index: 100;
+  }
+  
+  .search-box.active { 
+    width: calc(100vw - 100px);
+    max-width: none;
+  }
+  
+  /* Hide other nav items when search is active */
+  .nav-list:has(.search-box.active) .nav-link {
+    opacity: 0;
+    pointer-events: none;
+  }
   .search-item { grid-template-columns: 32px 1fr; gap: 10px; }
   .search-thumb { width: 32px; height: 48px; }
   .search-title { font-size: 13px; }
@@ -2003,15 +2043,47 @@ canvas.p5Canvas {
   }
   
   .episode-number {
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 1.3;
+    word-break: break-word;
   }
   
   .episode-rating {
     font-size: 12px;
   }
   
+  .episode-date {
+    font-size: 11px;
+  }
+  
   .episode-overview {
     font-size: 13px;
     -webkit-line-clamp: 2;
+  }
+}
+
+@media (max-width: 400px) {
+  .season-toggle,
+  .episode-filter-toggle {
+    font-size: 12px;
+    padding: 5px 6px;
+    width: 100%;
+  }
+  
+  .season-toggle::after,
+  .episode-filter-toggle::after {
+    font-size: 9px;
+  }
+  
+  .episode-number {
+    font-size: 12px;
+  }
+  
+  .episode-rating {
+    font-size: 11px;
+  }
+  
+  .episode-info {
+    padding: 12px;
   }
 }
