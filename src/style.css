@@ -2015,6 +2015,7 @@ canvas.p5Canvas {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  line-clamp: 3;
   overflow: hidden;
 }
 
@@ -2104,6 +2105,7 @@ canvas.p5Canvas {
   .episode-overview {
     font-size: 13px;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 }
 
