@@ -6,6 +6,7 @@ import { fetchTMDBData, img, getAllMovieGenres, getAllTVGenres, discoverMovies, 
 import { fetchTrailerUrl, fetchTitleImages } from "./media-utils.js";
 import { createMovieCard, createSkeletonCard, getGenreName as getMovieGenreName, populateRail, setupRail, startMovieCards, startRuntimeTags } from "./ui.js";
 import { attachTrailerButtonHandlers, formatDate, isBackdropImage, selectPreferredImage } from "./utils.js";
+import { checkIsAnime, getAnimeEmbedUrl } from "./anime-utils.js";
 
 import { VIDEO_CACHE_TTL_MS, HERO_ROTATION_INTERVAL_MS, MAX_HERO_SLIDES, MAX_RAIL_ITEMS, VOTE_COUNT_MIN_BASIC, VOTE_COUNT_MIN_RATING_WINDOWED, VOTE_COUNT_MIN_RATING_ALLTIME, VOTE_COUNT_MIN_GRID, VOTE_AVERAGE_MIN, GENRE_DISCOVERY_PAGES, GENRE_DISCOVERY_LIMIT, MAX_DISCOVERY_PAGES, INITIAL_RAILS_COUNT, RAIL_BATCH_SIZE, GRID_LOAD_MORE_MARGIN, RAIL_LAZY_LOAD_MARGIN, GRID_CHUNK_SIZE } from "./constants.js";
 
@@ -23,30 +24,33 @@ function attachWatchNowHandler(btn, type, item) {
   btn.addEventListener('click', async () => {
     try {
       let embedUrl = '';
+      const isAnimeTitle = await checkIsAnime(type, item.id, item);
       
-      if (type === 'movie') {
-        // For movies, use TMDB ID
+      if (isAnimeTitle) {
         const tmdbId = item.id;
-        embedUrl = `https://vidsrc.cc/v2/embed/movie/${tmdbId}?autoPlay=false`;
-      } else if (type === 'tv') {
-        // For TV shows, we need IMDB ID
-        try {
-          const externalIds = await fetchTMDBData(`/tv/${item.id}/external_ids`);
-          const imdbId = externalIds?.imdb_id;
-          if (imdbId) {
-            embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}?autoPlay=false`;
-          } else {
-            console.error('No IMDB ID found for TV show');
+        embedUrl = getAnimeEmbedUrl(type, tmdbId, 1, 1, 'dub');
+        openPlayerModal(embedUrl, true, tmdbId, 1, 1, type);
+      } else {
+        if (type === 'movie') {
+          const tmdbId = item.id;
+          embedUrl = `https://vidsrc.cc/v2/embed/movie/${tmdbId}?autoPlay=false`;
+          openPlayerModal(embedUrl);
+        } else if (type === 'tv') {
+          try {
+            const externalIds = await fetchTMDBData(`/tv/${item.id}/external_ids`);
+            const imdbId = externalIds?.imdb_id;
+            if (imdbId) {
+              embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}?autoPlay=false`;
+              openPlayerModal(embedUrl);
+            } else {
+              console.error('No IMDB ID found for TV show');
+              return;
+            }
+          } catch (error) {
+            console.error('Failed to fetch IMDB ID:', error);
             return;
           }
-        } catch (error) {
-          console.error('Failed to fetch IMDB ID:', error);
-          return;
         }
-      }
-      
-      if (embedUrl) {
-        openPlayerModal(embedUrl);
       }
     } catch (error) {
       console.error('Failed to open player:', error);
@@ -57,15 +61,31 @@ function attachWatchNowHandler(btn, type, item) {
 /**
  * Open player modal with embed URL
  * @param {string} embedUrl
+ * @param {boolean} [isAnime=false]
+ * @param {number} [tmdbId]
+ * @param {number} [season]
+ * @param {number} [episode]
+ * @param {string} [type]
  */
-function openPlayerModal(embedUrl) {
-  // Create modal overlay
+function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, episode = 1, type = 'tv') {
   const modal = document.createElement('div');
   modal.className = 'player-modal';
+  
+  let audioSelector = '';
+  if (isAnime && tmdbId) {
+    audioSelector = `
+      <div class="player-audio-selector">
+        <button class="audio-btn active" data-audio="dub">DUB</button>
+        <button class="audio-btn" data-audio="sub">SUB</button>
+      </div>
+    `;
+  }
+  
   modal.innerHTML = `
     <div class="player-modal-overlay"></div>
+    <button class="player-modal-close" aria-label="Close player">&times;</button>
     <div class="player-modal-content">
-      <button class="player-modal-close" aria-label="Close player">&times;</button>
+      ${audioSelector}
       <iframe 
         src="${embedUrl}" 
         frameborder="0" 
@@ -81,11 +101,9 @@ function openPlayerModal(embedUrl) {
   document.body.appendChild(modal);
   document.body.style.overflow = 'hidden';
   
-  // Block popup attempts
   const iframe = modal.querySelector('.player-iframe');
   iframe.addEventListener('load', () => {
     try {
-      // Prevent the iframe from opening new windows
       if (iframe.contentWindow) {
         const originalOpen = iframe.contentWindow.open;
         iframe.contentWindow.open = function() {
@@ -96,17 +114,27 @@ function openPlayerModal(embedUrl) {
     }
   });
   
-  // Close handlers
+  if (isAnime && tmdbId) {
+    const audioButtons = modal.querySelectorAll('.audio-btn');
+    audioButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const audio = btn.dataset.audio;
+        audioButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const newUrl = getAnimeEmbedUrl(type, tmdbId, season, episode, audio);
+        iframe.src = newUrl;
+      });
+    });
+  }
+  
   const closeModal = () => {
     modal.remove();
     document.body.style.overflow = '';
     document.removeEventListener('keydown', handleEsc);
   };
   
-  // Only close button closes the modal (not clicking outside)
   modal.querySelector('.player-modal-close').addEventListener('click', closeModal);
   
-  // ESC key to close
   const handleEsc = (e) => {
     if (e.key === 'Escape') {
       closeModal();
