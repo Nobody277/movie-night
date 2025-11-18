@@ -1,6 +1,7 @@
 import { bestBackdropForSize, fetchTMDBData, img } from "./api.js";
 import { fetchTitleImages, fetchTrailerUrl } from "./media-utils.js";
 import { attachTrailerButtonHandlers, formatYear, isBackdropImage, selectPreferredImage } from "./utils.js";
+import { checkIsAnime, getAnimeEmbedUrl } from "./anime-utils.js";
 
 import { MAX_PROVIDER_ICONS, PROVIDER_CACHE_TTL_MS, PROVIDER_FETCH_TIMEOUT_MS, PROVIDER_MAX_RETRIES, VIDEO_CACHE_TTL_MS } from "./constants.js";
 
@@ -621,17 +622,34 @@ async function loadSeasonEpisodes(tvId, seasonNumber, imdbId, sortBy = 'episode'
     grid.innerHTML = html;
     
     grid.querySelectorAll('.episode-play-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const imdbId = btn.dataset.imdb;
-        const season = btn.dataset.season;
-        const episode = btn.dataset.episode;
+        const season = parseInt(btn.dataset.season) || 1;
+        const episode = parseInt(btn.dataset.episode) || 1;
         
-        if (imdbId) {
-          const embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}/${season}/${episode}?autoPlay=false`;
-          openPlayerModal(embedUrl);
-        } else {
-          console.error('No IMDB ID available for this show');
+        try {
+          let embedUrl = '';
+          
+          if (tvId) {
+            const isAnimeTitle = await checkIsAnime('tv', tvId);
+            
+            if (isAnimeTitle) {
+              embedUrl = getAnimeEmbedUrl('tv', tvId, season, episode, 'dub');
+              openPlayerModal(embedUrl, true, tvId, season, episode);
+            } else if (imdbId) {
+              embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}/${season}/${episode}?autoPlay=false`;
+              openPlayerModal(embedUrl);
+            } else {
+              console.error('No IMDB ID available for this show');
+              return;
+            }
+          } else {
+            console.error('No TV ID available');
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to open episode player:', error);
         }
       });
     });
@@ -669,22 +687,27 @@ function attachWatchNowHandler(btn, type, details) {
   btn.addEventListener('click', async () => {
     try {
       let embedUrl = '';
+      const isAnimeTitle = await checkIsAnime(type, details.id, details);
       
-      if (type === 'movie') {
+      if (isAnimeTitle) {
         const tmdbId = details.id;
-        embedUrl = `https://vidsrc.cc/v2/embed/movie/${tmdbId}?autoPlay=false`;
-      } else if (type === 'tv') {
-        const imdbId = details.external_ids?.imdb_id;
-        if (imdbId) {
-          embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}?autoPlay=false`;
-        } else {
-          console.error('No IMDB ID found for TV show');
-          return;
+        embedUrl = getAnimeEmbedUrl(type, tmdbId, 1, 1, 'dub');
+        openPlayerModal(embedUrl, true, tmdbId, 1, 1, type);
+      } else {
+        if (type === 'movie') {
+          const tmdbId = details.id;
+          embedUrl = `https://vidsrc.cc/v2/embed/movie/${tmdbId}?autoPlay=false`;
+          openPlayerModal(embedUrl);
+        } else if (type === 'tv') {
+          const imdbId = details.external_ids?.imdb_id;
+          if (imdbId) {
+            embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}?autoPlay=false`;
+            openPlayerModal(embedUrl);
+          } else {
+            console.error('No IMDB ID found for TV show');
+            return;
+          }
         }
-      }
-      
-      if (embedUrl) {
-        openPlayerModal(embedUrl);
       }
     } catch (error) {
       console.error('Failed to open player:', error);
@@ -695,14 +718,31 @@ function attachWatchNowHandler(btn, type, details) {
 /**
  * Open player modal with embed URL
  * @param {string} embedUrl
+ * @param {boolean} [isAnime=false]
+ * @param {number} [tmdbId]
+ * @param {number} [season]
+ * @param {number} [episode]
+ * @param {string} [type]
  */
-function openPlayerModal(embedUrl) {
+function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, episode = 1, type = 'tv') {
   const modal = document.createElement('div');
   modal.className = 'player-modal';
+  
+  let audioSelector = '';
+  if (isAnime && tmdbId) {
+    audioSelector = `
+      <div class="player-audio-selector">
+        <button class="audio-btn active" data-audio="dub">DUB</button>
+        <button class="audio-btn" data-audio="sub">SUB</button>
+      </div>
+    `;
+  }
+  
   modal.innerHTML = `
     <div class="player-modal-overlay"></div>
+    <button class="player-modal-close" aria-label="Close player">&times;</button>
     <div class="player-modal-content">
-      <button class="player-modal-close" aria-label="Close player">&times;</button>
+      ${audioSelector}
       <iframe 
         src="${embedUrl}" 
         frameborder="0"
@@ -730,6 +770,19 @@ function openPlayerModal(embedUrl) {
     } catch (e) {
     }
   });
+  
+  if (isAnime && tmdbId) {
+    const audioButtons = modal.querySelectorAll('.audio-btn');
+    audioButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const audio = btn.dataset.audio;
+        audioButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const newUrl = getAnimeEmbedUrl(type, tmdbId, season, episode, audio);
+        iframe.src = newUrl;
+      });
+    });
+  }
   
   const closeModal = () => {
     modal.remove();
