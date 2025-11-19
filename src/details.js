@@ -356,6 +356,56 @@ function formatRuntimeOrEpisodes(details, type) {
 }
 
 /**
+ * Set up navigation buttons for the cast rail
+ */
+function setupCastRail() {
+  const rail = document.querySelector('.detail-cast-rail');
+  const prev = document.querySelector('.detail-cast-prev');
+  const next = document.querySelector('.detail-cast-next');
+  
+  if (!rail) return;
+  
+  const SCROLL_STEP_MULTIPLIER = 0.9;
+  const step = () => Math.round(rail.clientWidth * SCROLL_STEP_MULTIPLIER);
+  
+  if (prev) {
+    prev.addEventListener('click', () => {
+      rail.scrollBy({ left: -step(), behavior: 'smooth' });
+    });
+  }
+  
+  if (next) {
+    next.addEventListener('click', () => {
+      rail.scrollBy({ left: step(), behavior: 'smooth' });
+    });
+  }
+  
+  rail.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      rail.scrollBy({ left: step(), behavior: 'smooth' });
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      rail.scrollBy({ left: -step(), behavior: 'smooth' });
+    }
+  });
+  
+  let dragging = false, startX = 0, startScroll = 0;
+  const start = (x) => { dragging = true; startX = x; startScroll = rail.scrollLeft; };
+  const move = (x) => { if (dragging) rail.scrollLeft = startScroll - (x - startX); };
+  const end = () => { dragging = false; };
+  
+  rail.addEventListener('mousedown', e => start(e.pageX));
+  window.addEventListener('mousemove', e => move(e.pageX));
+  window.addEventListener('mouseup', end);
+  
+  rail.addEventListener('touchstart', e => start(e.touches[0].pageX), { passive: true });
+  rail.addEventListener('touchmove', e => move(e.touches[0].pageX), { passive: true });
+  window.addEventListener('touchend', end);
+}
+
+/**
  * Render details body section with overview, cast, crew, etc.
  * @param {string} type
  * @param {number} id
@@ -420,7 +470,21 @@ async function renderDetailsBody(type, id, details, myToken, currentDetailsToken
     
     const castWithImages = cast.filter(person => person.profile_path);
     if (castWithImages.length > 0) {
-      html += '<div class="detail-section"><h3 class="detail-title">Cast</h3><div class="detail-cast-rail">';
+      html += `
+        <div class="detail-section">
+          <div class="detail-cast-header">
+            <h3 class="detail-title">Cast</h3>
+            <div class="detail-cast-cta">
+              <button class="rail-btn detail-cast-prev" aria-label="Scroll left" type="button">
+                <span class="rail-icon">‹</span>
+              </button>
+              <button class="rail-btn detail-cast-next" aria-label="Scroll right" type="button">
+                <span class="rail-icon">›</span>
+              </button>
+            </div>
+          </div>
+          <div class="detail-cast-rail" tabindex="0">
+      `;
       castWithImages.forEach(person => {
         const imgUrl = img.poster(person.profile_path);
         html += `
@@ -460,6 +524,8 @@ async function renderDetailsBody(type, id, details, myToken, currentDetailsToken
     }
     
     bodyEl.innerHTML = html;
+    
+    setupCastRail();
     
     if (type === 'tv' && details.number_of_seasons > 0) {
       const seasonToggle = document.getElementById('season-toggle');
@@ -635,7 +701,7 @@ async function loadSeasonEpisodes(tvId, seasonNumber, imdbId, sortBy = 'episode'
             const isAnimeTitle = await checkIsAnime('tv', tvId);
             
             if (isAnimeTitle) {
-              embedUrl = getAnimeEmbedUrl('tv', tvId, season, episode, 'dub');
+              embedUrl = getAnimeEmbedUrl('tv', tvId, season, episode, 'sub');
               openPlayerModal(embedUrl, true, tvId, season, episode);
             } else if (imdbId) {
               embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}/${season}/${episode}?autoPlay=false`;
@@ -691,7 +757,7 @@ function attachWatchNowHandler(btn, type, details) {
       
       if (isAnimeTitle) {
         const tmdbId = details.id;
-        embedUrl = getAnimeEmbedUrl(type, tmdbId, 1, 1, 'dub');
+        embedUrl = getAnimeEmbedUrl(type, tmdbId, 1, 1, 'sub');
         openPlayerModal(embedUrl, true, tmdbId, 1, 1, type);
       } else {
         if (type === 'movie') {
@@ -732,8 +798,8 @@ function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, e
   if (isAnime && tmdbId) {
     audioSelector = `
       <div class="player-audio-selector">
-        <button class="audio-btn active" data-audio="dub">DUB</button>
-        <button class="audio-btn" data-audio="sub">SUB</button>
+        <button class="audio-btn active" data-audio="sub">SUB</button>
+        <button class="audio-btn" data-audio="dub">DUB</button>
       </div>
     `;
   }

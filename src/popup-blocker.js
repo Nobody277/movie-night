@@ -7,7 +7,26 @@ const originalWindowOpen = window.open;
 window.open = function(...args) {
   const url = args[0];
   
-  if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+  if (!url) return null;
+  
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    return originalWindowOpen.apply(this, args);
+  }
+  
+  const urlStr = String(url);
+  if (
+    urlStr.includes('/movie-night') ||
+    urlStr.includes('/movies/movie:') ||
+    urlStr.includes('/tv/tv:') ||
+    urlStr.includes('details.html') ||
+    urlStr.includes('movies.html') ||
+    urlStr.includes('tv.html') ||
+    urlStr.includes('search.html') ||
+    urlStr.includes('my-list.html') ||
+    urlStr.includes('index.html') ||
+    (urlStr.startsWith('/') && !urlStr.includes('://') && !urlStr.startsWith('//')) ||
+    (urlStr.endsWith('.html') && !urlStr.includes('://') && !urlStr.startsWith('//'))
+  ) {
     return originalWindowOpen.apply(this, args);
   }
   

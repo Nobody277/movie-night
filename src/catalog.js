@@ -28,7 +28,7 @@ function attachWatchNowHandler(btn, type, item) {
       
       if (isAnimeTitle) {
         const tmdbId = item.id;
-        embedUrl = getAnimeEmbedUrl(type, tmdbId, 1, 1, 'dub');
+        embedUrl = getAnimeEmbedUrl(type, tmdbId, 1, 1, 'sub');
         openPlayerModal(embedUrl, true, tmdbId, 1, 1, type);
       } else {
         if (type === 'movie') {
@@ -75,8 +75,8 @@ function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, e
   if (isAnime && tmdbId) {
     audioSelector = `
       <div class="player-audio-selector">
-        <button class="audio-btn active" data-audio="dub">DUB</button>
-        <button class="audio-btn" data-audio="sub">SUB</button>
+        <button class="audio-btn active" data-audio="sub">SUB</button>
+        <button class="audio-btn" data-audio="dub">DUB</button>
       </div>
     `;
   }

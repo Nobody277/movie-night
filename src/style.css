@@ -1616,6 +1616,22 @@ canvas.p5Canvas {
   font-weight: 400;
 }
 
+.detail-cast-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.detail-cast-header .detail-title {
+  margin: 0;
+}
+
+.detail-cast-cta {
+  display: flex;
+  gap: 8px;
+}
+
 /* Overview */
 .detail-overview {
   font-size: 16px;
