@@ -424,6 +424,11 @@ function setupGenres(config) {
     const willOpen = !genresPanel.classList.contains('open');
     genresPanel.classList.toggle('open', willOpen);
     genresToggle.setAttribute('aria-expanded', String(willOpen));
+    
+    if (willOpen && window.innerWidth <= 600) {
+      const toggleRect = genresToggle.getBoundingClientRect();
+      genresPanel.style.top = `${toggleRect.bottom + 8}px`;
+    }
   });
   document.addEventListener('click', (e) => { if (!genresToggle.contains(e.target) && !genresPanel.contains(e.target)) { genresPanel.classList.remove('open'); genresToggle.setAttribute('aria-expanded', 'false'); } });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { genresPanel.classList.remove('open'); genresToggle.setAttribute('aria-expanded', 'false'); genresToggle.focus(); } });

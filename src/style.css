@@ -996,9 +996,18 @@ canvas.p5Canvas {
   .genres-toggle, .sort-toggle, .time-toggle, .apply-filters, .clear-filters { font-size: 13px; padding: 6px 8px; }
   .genres-counter { font-size: 12px; }
 
-  .genres-panel { left: 8px; right: 8px; width: auto; max-height: 70vh; }
-  .genres-list { gap: 6px 4px; }
-  .genre-label { padding: 6px 8px; font-size: 12px; }
+  .genres-panel { 
+    position: fixed !important;
+    left: 8px !important; 
+    right: 8px !important; 
+    width: calc(100vw - 16px) !important;
+    min-width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: 70vh; 
+    padding: 12px; 
+  }
+  .genres-list { gap: 8px 8px; }
+  .genre-label { padding: 8px 12px; font-size: 13px; white-space: nowrap; }
 
   .movie-grid { gap: 12px; }
   .movie-title { font-size: 13px; }
