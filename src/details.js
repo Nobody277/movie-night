@@ -2,14 +2,344 @@ import { bestBackdropForSize, fetchTMDBData, img } from "./api.js";
 import { fetchTitleImages, fetchTrailerUrl } from "./media-utils.js";
 import { attachTrailerButtonHandlers, formatYear, isBackdropImage, selectPreferredImage } from "./utils.js";
 import { checkIsAnime, getAnimeEmbedUrl } from "./anime-utils.js";
-
 import { MAX_PROVIDER_ICONS, PROVIDER_CACHE_TTL_MS, PROVIDER_FETCH_TIMEOUT_MS, PROVIDER_MAX_RETRIES, VIDEO_CACHE_TTL_MS } from "./constants.js";
+import { showAddToListMenu, updateAddButton } from "./ui.js";
+import * as listStore from "./list-store.js";
 
-// Module State (Private)
+const SOURCES_WITHOUT_SANDBOX = ['111movies', '2embed', 'filmku', 'godrive', 'moviesapi', 'primesrc', 'smashy', 'vidora', 'videasy', 'vidfast', 'vidlink', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidup'];
+
+const SOURCES = {
+  vidsrc: {
+    name: 'VidSrc',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsrc.cc/v2/embed/movie/${details.id}?autoPlay=false`;
+      } else if (type === 'tv') {
+        return `https://vidsrc.cc/v2/embed/tv/${details.id}/${season}/${episode}?autoPlay=false`;
+      }
+      return null;
+    }
+  },
+  cinetaro: {
+    name: 'Cinetaro',
+    getUrl: (type, details, season = 1, episode = 1, audio = 'sub') => {
+      return getAnimeEmbedUrl(type, details.id, season, episode, audio);
+    }
+  },
+  '111movies': {
+    name: '111Movies',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://111movies.com/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://111movies.com/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  '2embed': {
+    name: '2Embed',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://www.2embed.stream/embed/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://www.2embed.stream/embed/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'autoembed': {
+    name: 'AutoEmbed',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://player.autoembed.cc/embed/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://player.autoembed.cc/embed/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'bidsrc': {
+    name: 'BidSrc',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://bidsrc.pro/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://bidsrc.pro/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidsrcwtf': {
+    name: 'VidSrc WTF', // TODO: Fix fullscreen
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsrc.wtf/api/1/movie/?id=${details.id}&color=e01621`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://vidsrc.wtf/api/1/tv/?id=${tvId}&s=${season}&e=${episode}&color=e01621`;
+      }
+      return null;
+    }
+  },
+  'filmku': {
+    name: 'Filmku',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://filmku.stream/embed/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://filmku.stream/embed/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'fmovies4u': {
+    name: 'FMovies4U',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://fmovies4u.com/embed/tmdb-movie-${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://fmovies4u.com/embed/tmdb-tv-${tvId}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'godrive': {
+    name: 'GoDrive',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://godriveplayer.com/player.php?tmdb=${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://godriveplayer.com/player.php?type=series&tmdb=${tvId}&season=${season}&episode=${episode}`;
+      }
+      return null;
+    }
+  },
+  'moviesapi': {
+    name: 'MoviesAPI',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://moviesapi.club/movie/${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://moviesapi.club/tv/${tvId}-${season}-${episode}`;
+      }
+      return null;
+    }
+  },
+  'primesrc': {
+    name: 'PrimeSrc',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://primesrc.me/embed/movie?tmdb=${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://primesrc.me/embed/tv?tmdb=${tvId}&season=${season}&episode=${episode}`;
+      }
+      return null;
+    }
+  },
+  'rivestream': {
+    name: 'RiveStream',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://rivestream.org/embed?type=movie&id=${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://rivestream.org/embed?type=tv&id=${tvId}&season=${season}&episode=${episode}`;
+      }
+      return null;
+    }
+  },
+  'smashy': {
+    name: 'Smashy',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://player.smashy.stream/movie/${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://player.smashy.stream/tv/${tvId}?s=${season}&e=${episode}`;
+      }
+      return null;
+    }
+  },
+  'spencerdevs': {
+    name: 'SpencerDevs',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://spencerdevs.xyz/movie/${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://spencerdevs.xyz/tv/${tvId}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidora': {
+    name: 'Vidora',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidora.su/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://vidora.su/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'videasy': {
+    name: 'Videasy',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://player.videasy.net/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://player.videasy.net/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidfast': {
+    name: 'VidFast',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidfast.pro/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://vidfast.pro/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidify': {
+    name: 'Vidify',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://player.vidify.top/embed/movie/${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://player.vidify.top/embed/tv/${tvId}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidzee': {
+    name: 'VidZee',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://player.vidzee.wtf/embed/movie/${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://player.vidzee.wtf/embed/tv/${tvId}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidlink': {
+    name: 'VidLink',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidlink.pro/movie/${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://vidlink.pro/tv/${tvId}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidnest': {
+    name: 'VidNest',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidnest.fun/movie/${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://vidnest.fun/tv/${tvId}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidsrccx': {
+    name: 'VidSrc CX',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsrc.cx/embed/movie/${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://vidsrc.cx/embed/tv/${tvId}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidsrcme': {
+    name: 'VidSrc ME',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsrcme.ru/embed/movie?tmdb=${details.id}`;
+      } else if (type === 'tv') {
+        const tvId = details.external_ids?.tvdb_id || details.id;
+        return `https://vidsrc-embed.ru/embed/tv?tmdb=${tvId}&season=${season}&episode=${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidsrcto': {
+    name: 'VidSrc TO',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsrc.to/embed/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://vidsrc.to/embed/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidrock': {
+    name: 'VidRock',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidrock.net/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://vidrock.net/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  },
+  'vixsrc': {
+    name: 'VixSrc',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vixsrc.to/movie/${details.id}/`;
+      } else if (type === 'tv') {
+        return `https://vixsrc.to/tv/${details.id}/${season}/${episode}/`;
+      }
+      return null;
+    }
+  },
+  'vidsync': {
+    name: 'VidSync',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsync.xyz/embed/movie?tmdb=${details.id}`;
+      } else if (type === 'tv') {
+        return `https://vidsync.xyz/embed/tv?tmdb=${details.id}&s=${season}&e=${episode}`;
+      }
+      return null;
+    }
+  },
+  'vidup': {
+    name: 'VidUp',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidup.to/movie/${details.id}`;
+      } else if (type === 'tv') {
+        return `https://vidup.to/tv/${details.id}/${season}/${episode}`;
+      }
+      return null;
+    }
+  }
+};
 
 let currentDetailsToken = 0;
-
-// Public Exports
 
 /**
  * Initialize details page hero, metadata, trailer, providers
@@ -44,8 +374,21 @@ export async function startDetailsPage() {
     
     if (myToken !== currentDetailsToken) return;
     
-    // Render details body with overview, cast, crew, etc.
     await renderDetailsBody(type, id, data.details, myToken, currentDetailsToken);
+
+    if (myToken === currentDetailsToken) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash;
+      const shouldAutoPlay = urlParams.get('play') === 'true' || hash === '#play';
+      
+      if (shouldAutoPlay) {
+        const season = parseInt(urlParams.get('season')) || 1;
+        const episode = parseInt(urlParams.get('episode')) || 1;
+        setTimeout(() => {
+          triggerHeroPlayer(type, id, season, episode);
+        }, 500);
+      }
+    }
 
   } catch (e) {
     console.error("Failed to load details page for", type, id, e);
@@ -55,8 +398,6 @@ export async function startDetailsPage() {
     hero.classList.remove("loading");
   }
 }
-
-// Data Fetching Functions (Private)
 
 /**
  * Parse media type and ID from URL pathname
@@ -177,8 +518,6 @@ async function fetchWatchProviders(type, id, region) {
   } catch { return []; }
 }
 
-// Rendering Functions (Private)
-
 /**
  * Render skeleton loading state for hero section
  * @param {HTMLElement} root
@@ -239,6 +578,7 @@ function renderDetailsHero(hero, data, type, myToken, currentDetailsToken) {
         <div class="featured-cta">
           <button class="btn watch-now" type="button">Watch Now</button>
           <button class="btn watch-trailer" type="button">Watch Trailer</button>
+          <button class="btn add-to-list" type="button" aria-label="Add to My List">Add to List</button>
         </div>`;
       if (myToken !== currentDetailsToken) return;
       contentEl.classList.add("slide-enter");
@@ -246,6 +586,11 @@ function renderDetailsHero(hero, data, type, myToken, currentDetailsToken) {
       const watchNowBtn = contentEl.querySelector('.watch-now');
       if (watchNowBtn) {
         attachWatchNowHandler(watchNowBtn, type, details);
+      }
+      
+      const addToListBtn = contentEl.querySelector('.add-to-list');
+      if (addToListBtn) {
+        attachAddToListHandler(addToListBtn, type, details);
       }
     }
 
@@ -335,8 +680,6 @@ function updateProviderMetaTags(providers) {
     });
   } catch {}
 }
-
-// Utility Functions (Private)
 
 /**
  * Format runtime for movies or episode count for TV shows
@@ -595,7 +938,7 @@ async function renderDetailsBody(type, id, details, myToken, currentDetailsToken
  * Load and display episodes for a specific season
  * @param {number} tvId
  * @param {number} seasonNumber
- * @param {string} imdbId
+ * @param {string} imdbId - Deprecated, kept for backward compatibility
  * @param {string} sortBy - 'episode', 'rating', or 'popular'
  * @param {number} totalSeasons - Total number of seasons
  */
@@ -667,7 +1010,7 @@ async function loadSeasonEpisodes(tvId, seasonNumber, imdbId, sortBy = 'episode'
         <div class="episode-card" data-episode="${ep.episode_number}" data-season="${epSeasonNum}">
           <div class="episode-still-wrapper">
             ${stillUrl ? `<img src="${stillUrl}" alt="${ep.name}" class="episode-still" loading="lazy">` : '<div class="episode-still-placeholder"></div>'}
-            <button class="episode-play-btn" data-imdb="${imdbId}" data-season="${epSeasonNum}" data-episode="${ep.episode_number}">
+            <button class="episode-play-btn" data-tv-id="${tvId}" data-season="${epSeasonNum}" data-episode="${ep.episode_number}">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M8 5v14l11-7z"/>
               </svg>
@@ -690,33 +1033,11 @@ async function loadSeasonEpisodes(tvId, seasonNumber, imdbId, sortBy = 'episode'
     grid.querySelectorAll('.episode-play-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const imdbId = btn.dataset.imdb;
+        const episodeTvId = parseInt(btn.dataset.tvId) || tvId;
         const season = parseInt(btn.dataset.season) || 1;
         const episode = parseInt(btn.dataset.episode) || 1;
         
-        try {
-          let embedUrl = '';
-          
-          if (tvId) {
-            const isAnimeTitle = await checkIsAnime('tv', tvId);
-            
-            if (isAnimeTitle) {
-              embedUrl = getAnimeEmbedUrl('tv', tvId, season, episode, 'sub');
-              openPlayerModal(embedUrl, true, tvId, season, episode);
-            } else if (imdbId) {
-              embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}/${season}/${episode}?autoPlay=false`;
-              openPlayerModal(embedUrl);
-            } else {
-              console.error('No IMDB ID available for this show');
-              return;
-            }
-          } else {
-            console.error('No TV ID available');
-            return;
-          }
-        } catch (error) {
-          console.error('Failed to open episode player:', error);
-        }
+        await triggerHeroPlayer('tv', episodeTvId, season, episode);
       });
     });
     
@@ -742,6 +1063,116 @@ function formatDate(dateStr) {
 }
 
 /**
+ * Trigger player in hero section (exported for external use)
+ * @param {string} type
+ * @param {number} id
+ * @param {number} [season=1]
+ * @param {number} [episode=1]
+ */
+export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
+  try {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const hero = document.getElementById("details-hero") || document.querySelector(".featured-hero");
+    if (!hero) {
+      console.warn('Hero element not found, retrying...');
+      setTimeout(() => triggerHeroPlayer(type, id, season, episode), 200);
+      return;
+    }
+    
+    let details;
+    try {
+      const endpoint = type === 'tv' ? `/tv/${id}` : `/movie/${id}`;
+      details = await fetchTMDBData(endpoint);
+      if (!details) throw new Error("Missing details");
+      
+      if (type === 'tv') {
+        try {
+          const externalIds = await fetchTMDBData(`/tv/${id}/external_ids`);
+          if (externalIds) {
+            details.external_ids = externalIds;
+          }
+        } catch (error) {
+          console.error('Failed to fetch external IDs:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch details:', error);
+      return;
+    }
+    
+    const isAnimeTitle = await checkIsAnime(type, id, details);
+    
+    const availableSources = [];
+    let defaultSource = null;
+    let defaultAudio = 'sub';
+    
+    if (isAnimeTitle) {
+      availableSources.push({ id: 'cinetaro', ...SOURCES.cinetaro });
+      defaultSource = 'cinetaro';
+      
+      const vidsrcUrl = SOURCES.vidsrc.getUrl(type, details, season, episode);
+      if (vidsrcUrl) {
+        availableSources.push({ id: 'vidsrc', ...SOURCES.vidsrc });
+      }
+      
+      const movies111Url = SOURCES['111movies'].getUrl(type, details, season, episode);
+      if (movies111Url) {
+        availableSources.push({ id: '111movies', ...SOURCES['111movies'] });
+      }
+      
+      const embed2Url = SOURCES['2embed'].getUrl(type, details, season, episode);
+      if (embed2Url) {
+        availableSources.push({ id: '2embed', ...SOURCES['2embed'] });
+      }
+      
+      const otherSources = ['autoembed', 'bidsrc', 'vidsrcwtf', 'filmku', 'fmovies4u', 'godrive', 'moviesapi', 'primesrc', 'rivestream', 'smashy', 'spencerdevs', 'vidora', 'videasy', 'vidfast', 'vidify', 'vidzee', 'vidlink', 'vidnest', 'vidsrccx', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidsync', 'vidup'];
+      otherSources.forEach(sourceId => {
+        const sourceUrl = SOURCES[sourceId]?.getUrl(type, details, season, episode);
+        if (sourceUrl) {
+          availableSources.push({ id: sourceId, ...SOURCES[sourceId] });
+        }
+      });
+    } else {
+      const vidsrcUrl = SOURCES.vidsrc.getUrl(type, details, season, episode);
+      if (vidsrcUrl) {
+        availableSources.push({ id: 'vidsrc', ...SOURCES.vidsrc });
+        defaultSource = 'vidsrc';
+      }
+      
+      const movies111Url = SOURCES['111movies'].getUrl(type, details, season, episode);
+      if (movies111Url) {
+        availableSources.push({ id: '111movies', ...SOURCES['111movies'] });
+      }
+      
+      const embed2Url = SOURCES['2embed'].getUrl(type, details, season, episode);
+      if (embed2Url) {
+        availableSources.push({ id: '2embed', ...SOURCES['2embed'] });
+      }
+      
+      const otherSources = ['autoembed', 'bidsrc', 'vidsrcwtf', 'filmku', 'fmovies4u', 'godrive', 'moviesapi', 'primesrc', 'rivestream', 'smashy', 'spencerdevs', 'vidora', 'videasy', 'vidfast', 'vidify', 'vidzee', 'vidlink', 'vidnest', 'vidsrccx', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidsync', 'vidup'];
+      otherSources.forEach(sourceId => {
+        const sourceUrl = SOURCES[sourceId]?.getUrl(type, details, season, episode);
+        if (sourceUrl) {
+          availableSources.push({ id: sourceId, ...SOURCES[sourceId] });
+        }
+      });
+    }
+    
+    if (availableSources.length === 0) {
+      console.error('No available sources');
+      return;
+    }
+    
+    hero.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    showPlayerInHero(hero, type, details, availableSources, defaultSource, defaultAudio, isAnimeTitle, season, episode);
+  } catch (error) {
+    console.error('Failed to trigger hero player:', error);
+  }
+}
+
+/**
  * Attach Watch Now button handler
  * @param {HTMLElement} btn
  * @param {string} type
@@ -751,38 +1182,312 @@ function attachWatchNowHandler(btn, type, details) {
   if (!btn) return;
   
   btn.addEventListener('click', async () => {
-    try {
-      let embedUrl = '';
-      const isAnimeTitle = await checkIsAnime(type, details.id, details);
-      
-      if (isAnimeTitle) {
-        const tmdbId = details.id;
-        embedUrl = getAnimeEmbedUrl(type, tmdbId, 1, 1, 'sub');
-        openPlayerModal(embedUrl, true, tmdbId, 1, 1, type);
-      } else {
-        if (type === 'movie') {
-          const tmdbId = details.id;
-          embedUrl = `https://vidsrc.cc/v2/embed/movie/${tmdbId}?autoPlay=false`;
-          openPlayerModal(embedUrl);
-        } else if (type === 'tv') {
-          const imdbId = details.external_ids?.imdb_id;
-          if (imdbId) {
-            embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}?autoPlay=false`;
-            openPlayerModal(embedUrl);
-          } else {
-            console.error('No IMDB ID found for TV show');
-            return;
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to open player:', error);
-    }
+    await triggerHeroPlayer(type, details.id, 1, 1);
   });
 }
 
 /**
- * Open player modal with embed URL
+ * Attach Add to List button handler
+ * @param {HTMLElement} btn
+ * @param {string} type
+ * @param {Object} details
+ */
+function attachAddToListHandler(btn, type, details) {
+  if (!btn) return;
+  
+  const item = {
+    id: details.id,
+    type: type,
+    title: details.title || details.name || 'Untitled',
+    name: details.name || details.title || 'Untitled',
+    poster_path: details.poster_path,
+    backdrop_path: details.backdrop_path,
+    vote_average: details.vote_average || 0,
+    genre_ids: details.genres ? details.genres.map(g => g.id) : (details.genre_ids || []),
+    release_date: details.release_date || null,
+    first_air_date: details.first_air_date || null
+  };
+  
+  updateAddButton(btn, item);
+  
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    btn.blur();
+    showAddToListMenu(btn, item);
+  });
+}
+
+/**
+ * Show player in hero section
+ * @param {HTMLElement} hero
+ * @param {string} type
+ * @param {Object} details
+ * @param {Array} availableSources
+ * @param {string} defaultSource
+ * @param {string} defaultAudio
+ * @param {boolean} isAnime
+ * @param {number} [season=1]
+ * @param {number} [episode=1]
+ */
+function showPlayerInHero(hero, type, details, availableSources, defaultSource, defaultAudio, isAnime, season = 1, episode = 1) {
+  const existingPlayer = hero.querySelector('.hero-player-container');
+  if (existingPlayer) {
+    existingPlayer.remove();
+  }
+  
+  const mainContainer = hero.closest('.container') || hero.parentElement;
+  const existingSourceSelector = mainContainer?.querySelector('.hero-source-selector');
+  if (existingSourceSelector) {
+    existingSourceSelector.remove();
+  }
+  
+  const overlay = hero.querySelector('.featured-hero-overlay');
+  const content = hero.querySelector('.featured-hero-content');
+  
+  if (overlay) overlay.classList.add('fade-out');
+  if (content) content.classList.add('fade-out');
+  
+  const defaultSourceObj = availableSources.find(s => s.id === defaultSource);
+  if (!defaultSourceObj) return;
+  
+  let embedUrl = '';
+  if (defaultSource === 'cinetaro') {
+    embedUrl = defaultSourceObj.getUrl(type, details, season, episode, defaultAudio);
+  } else {
+    embedUrl = defaultSourceObj.getUrl(type, details, season, episode);
+  }
+  
+  if (!embedUrl) return;
+  
+  const playerContainer = document.createElement('div');
+  playerContainer.className = 'hero-player-container';
+  playerContainer.dataset.season = season;
+  playerContainer.dataset.episode = episode;
+  
+  const useSandbox = !SOURCES_WITHOUT_SANDBOX.includes(defaultSource);
+  
+  playerContainer.innerHTML = `
+    <div class="hero-player-wrapper">
+      <iframe 
+        src="${embedUrl}" 
+        frameborder="0"
+        allowfullscreen
+        ${useSandbox ? 'sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"' : ''}
+        allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+        class="hero-player-iframe"
+        referrerpolicy="no-referrer"
+      ></iframe>
+    </div>
+  `;
+  
+  const sourceSelector = document.createElement('div');
+  sourceSelector.className = 'hero-source-selector';
+  sourceSelector.dataset.isAnime = isAnime;
+  sourceSelector.dataset.defaultAudio = defaultAudio;
+  
+  const sourceButtonsHtml = availableSources.map((source, index) => {
+    const isCinetaro = source.id === 'cinetaro';
+    const isActive = source.id === defaultSource;
+    const showAudioButtons = isAnime && isCinetaro && isActive;
+    
+    return `
+      <div class="source-btn-wrapper" data-source-id="${source.id}">
+        <button 
+          class="source-btn ${isActive ? 'active' : ''}" 
+          data-source="${source.id}"
+          title="${source.name}"
+        >
+          ${source.name}
+        </button>
+        ${showAudioButtons ? `
+          <div class="source-audio-selector">
+            <button class="audio-btn ${defaultAudio === 'sub' ? 'active' : ''}" data-audio="sub">SUB</button>
+            <button class="audio-btn ${defaultAudio === 'dub' ? 'active' : ''}" data-audio="dub">DUB</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  sourceSelector.innerHTML = sourceButtonsHtml;
+  
+  hero.appendChild(playerContainer);
+  
+  if (mainContainer) {
+    mainContainer.insertBefore(sourceSelector, hero.nextSibling);
+  } else {
+    hero.parentElement.appendChild(sourceSelector);
+  }
+  
+  const iframe = playerContainer.querySelector('.hero-player-iframe');
+  if (!useSandbox) {
+    iframe.removeAttribute('sandbox');
+  }
+  
+  setTimeout(() => {
+    playerContainer.classList.add('fade-in');
+    sourceSelector.classList.add('fade-in');
+  }, 50);
+  let iframeInteractionTime = 0;
+  let navigationBlocked = false;
+  
+  iframe.addEventListener('mouseenter', () => {
+    iframeInteractionTime = Date.now();
+    navigationBlocked = true;
+  });
+  
+  iframe.addEventListener('mouseleave', () => {
+    setTimeout(() => {
+      navigationBlocked = false;
+    }, 1000);
+  });
+  
+  iframe.addEventListener('load', () => {
+    try {
+      if (iframe.contentWindow) {
+        try {
+          const iframeWindow = iframe.contentWindow;
+          const originalOpen = iframeWindow.open;
+          iframeWindow.open = function(...args) {
+            const url = args[0];
+            if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+              return originalOpen.apply(this, args);
+            }
+            return null;
+          };
+        } catch (e) {
+        }
+      }
+    } catch (e) {
+    }
+  });
+  
+  let lastBlurTime = 0;
+  const blurHandler = () => {
+    const now = Date.now();
+    const timeSinceInteraction = now - iframeInteractionTime;
+    
+    if (timeSinceInteraction < 2000 && now - lastBlurTime < 500) {
+      setTimeout(() => {
+        if (!document.hasFocus()) {
+          window.focus();
+        }
+      }, 10);
+    }
+    lastBlurTime = now;
+  };
+  
+  window.addEventListener('blur', blurHandler, { capture: true });
+  
+  playerContainer._cleanup = () => {
+    window.removeEventListener('blur', blurHandler, { capture: true });
+    navigationBlocked = false;
+  };
+  
+  const sourceButtons = sourceSelector.querySelectorAll('.source-btn');
+  sourceButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sourceId = btn.dataset.source;
+      const sourceObj = availableSources.find(s => s.id === sourceId);
+      if (!sourceObj) return;
+      
+      const currentSeason = parseInt(playerContainer.dataset.season) || season;
+      const currentEpisode = parseInt(playerContainer.dataset.episode) || episode;
+      
+      sourceButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      const sourceWrappers = sourceSelector.querySelectorAll('.source-btn-wrapper');
+      sourceWrappers.forEach(wrapper => {
+        const wrapperSourceId = wrapper.dataset.sourceId;
+        const audioSelector = wrapper.querySelector('.source-audio-selector');
+        const isCinetaro = wrapperSourceId === 'cinetaro';
+        const isActive = wrapperSourceId === sourceId;
+        
+        if (audioSelector) {
+          if (isAnime && isCinetaro && isActive) {
+            audioSelector.style.display = 'flex';
+          } else {
+            audioSelector.style.display = 'none';
+          }
+        }
+      });
+      
+      let newUrl = '';
+      if (sourceId === 'cinetaro') {
+        const activeAudio = sourceSelector.querySelector('.audio-btn.active')?.dataset.audio || defaultAudio;
+        newUrl = sourceObj.getUrl(type, details, currentSeason, currentEpisode, activeAudio);
+      } else {
+        newUrl = sourceObj.getUrl(type, details, currentSeason, currentEpisode);
+      }
+      
+      if (newUrl) {
+        if (SOURCES_WITHOUT_SANDBOX.includes(sourceId)) {
+          iframe.removeAttribute('sandbox');
+        } else {
+          iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-presentation');
+        }
+        iframe.src = newUrl;
+      }
+    });
+  });
+  
+  if (isAnime) {
+    const audioButtons = sourceSelector.querySelectorAll('.audio-btn');
+    audioButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const audio = btn.dataset.audio;
+        const audioSelector = btn.closest('.source-audio-selector');
+        if (audioSelector) {
+          audioSelector.querySelectorAll('.audio-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        }
+        
+        const activeSource = sourceSelector.querySelector('.source-btn.active')?.dataset.source;
+        if (activeSource === 'cinetaro') {
+          const sourceObj = availableSources.find(s => s.id === 'cinetaro');
+          if (sourceObj) {
+            const currentSeason = parseInt(playerContainer.dataset.season) || season;
+            const currentEpisode = parseInt(playerContainer.dataset.episode) || episode;
+            const newUrl = sourceObj.getUrl(type, details, currentSeason, currentEpisode, audio);
+            if (newUrl) {
+              iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-presentation');
+              iframe.src = newUrl;
+            }
+          }
+        }
+      });
+    });
+  }
+  
+  const closePlayer = () => {
+    if (playerContainer._cleanup) {
+      playerContainer._cleanup();
+    }
+    
+    playerContainer.classList.remove('fade-in');
+    playerContainer.classList.add('fade-out');
+    sourceSelector.classList.remove('fade-in');
+    sourceSelector.classList.add('fade-out');
+    setTimeout(() => {
+      playerContainer.remove();
+      sourceSelector.remove();
+      if (overlay) overlay.classList.remove('fade-out');
+      if (content) content.classList.remove('fade-out');
+    }, 300);
+    document.removeEventListener('keydown', handleEsc);
+  };
+  
+  const handleEsc = (e) => {
+    if (e.key === 'Escape') {
+      closePlayer();
+    }
+  };
+  document.addEventListener('keydown', handleEsc);
+}
+
+/**
+ * Open player modal with embed URL (kept for backward compatibility)
  * @param {string} embedUrl
  * @param {boolean} [isAnime=false]
  * @param {number} [tmdbId]

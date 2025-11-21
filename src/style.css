@@ -846,6 +846,12 @@ canvas.p5Canvas {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg, rgba(15,17,21,0.05), rgba(15,17,21,0.65) 55%, rgba(15,17,21,0.95));
+  transition: opacity 300ms ease-out;
+}
+
+.featured-hero-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .featured-hero-content {
@@ -857,6 +863,12 @@ canvas.p5Canvas {
   gap: 12px;
   padding: 20px;
   min-height: 320px;
+  transition: opacity 300ms ease-out;
+}
+
+.featured-hero-content.fade-out {
+  opacity: 0;
+  pointer-events: none;
 }
 
 @keyframes heroKenBurns {
@@ -1610,6 +1622,200 @@ canvas.p5Canvas {
   .audio-btn {
     padding: 5px 12px;
     font-size: 12px;
+  }
+}
+
+.hero-player-container {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 300ms ease-in;
+}
+
+.hero-player-container.fade-in {
+  opacity: 1;
+}
+
+.hero-player-container.fade-out {
+  opacity: 0;
+}
+
+.hero-player-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(21,25,35,0.95);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 20;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 0;
+}
+
+.hero-player-close:hover {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.35);
+}
+
+.hero-player-wrapper {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-player-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+.hero-source-selector {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  justify-content: center;
+  align-items: flex-start;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 300ms ease-in;
+  margin-top: -1px;
+  flex-wrap: wrap;
+}
+
+.hero-source-selector.fade-in {
+  opacity: 1;
+}
+
+.hero-source-selector.fade-out {
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.source-btn {
+  padding: 8px 16px;
+  background: rgba(21,25,35,0.8);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.source-btn:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text);
+}
+
+.source-btn.active {
+  background: rgba(107,138,253,0.25);
+  border-color: rgba(107,138,253,0.5);
+  color: var(--accent);
+}
+
+.source-btn-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.source-audio-selector {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.source-audio-selector .audio-btn {
+  padding: 4px 10px;
+  background: rgba(21,25,35,0.7);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.source-audio-selector .audio-btn:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.25);
+  color: var(--text);
+}
+
+.source-audio-selector .audio-btn.active {
+  background: rgba(107,138,253,0.3);
+  border-color: rgba(107,138,253,0.6);
+  color: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .hero-player-close {
+    width: 36px;
+    height: 36px;
+    top: 12px;
+    right: 12px;
+    font-size: 20px;
+  }
+  
+  .hero-source-selector {
+    padding: 10px 16px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  
+  .source-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+  }
+  
+  .source-audio-selector {
+    gap: 4px;
+  }
+  
+  .source-audio-selector .audio-btn {
+    padding: 3px 8px;
+    font-size: 10px;
   }
 }
 

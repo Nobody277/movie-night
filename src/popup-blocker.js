@@ -9,6 +9,16 @@ window.open = function(...args) {
   
   if (!url) return null;
   
+  try {
+    const stack = new Error().stack;
+    if (stack && stack.includes('HTMLIFrameElement')) {
+      if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+        return null;
+      }
+    }
+  } catch (e) {
+  }
+  
   if (url.includes('youtube.com') || url.includes('youtu.be')) {
     return originalWindowOpen.apply(this, args);
   }
@@ -33,15 +43,26 @@ window.open = function(...args) {
   return null;
 };
 
-// Block focus stealing
 let lastFocusTime = Date.now();
+let blurCount = 0;
 window.addEventListener('blur', () => {
   const now = Date.now();
-  if (now - lastFocusTime < 1000) {
-    setTimeout(() => window.focus(), 10);
+  blurCount++;
+  
+  if (now - lastFocusTime < 500) {
+    setTimeout(() => {
+      if (!document.hasFocus()) {
+        window.focus();
+      }
+    }, 10);
   }
+  
+  setTimeout(() => {
+    blurCount = 0;
+  }, 1000);
+  
   lastFocusTime = now;
-});
+}, { capture: true });
 
 const observer = new MutationObserver((mutations) => {
   mutations.forEach((mutation) => {

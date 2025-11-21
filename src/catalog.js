@@ -10,8 +10,6 @@ import { checkIsAnime, getAnimeEmbedUrl } from "./anime-utils.js";
 
 import { VIDEO_CACHE_TTL_MS, HERO_ROTATION_INTERVAL_MS, MAX_HERO_SLIDES, MAX_RAIL_ITEMS, VOTE_COUNT_MIN_BASIC, VOTE_COUNT_MIN_RATING_WINDOWED, VOTE_COUNT_MIN_RATING_ALLTIME, VOTE_COUNT_MIN_GRID, VOTE_AVERAGE_MIN, GENRE_DISCOVERY_PAGES, GENRE_DISCOVERY_LIMIT, MAX_DISCOVERY_PAGES, INITIAL_RAILS_COUNT, RAIL_BATCH_SIZE, GRID_LOAD_MORE_MARGIN, RAIL_LAZY_LOAD_MARGIN, GRID_CHUNK_SIZE } from "./constants.js";
 
-// Helper Functions for Watch Now
-
 /**
  * Attach Watch Now button handler
  * @param {HTMLElement} btn
@@ -21,39 +19,26 @@ import { VIDEO_CACHE_TTL_MS, HERO_ROTATION_INTERVAL_MS, MAX_HERO_SLIDES, MAX_RAI
 function attachWatchNowHandler(btn, type, item) {
   if (!btn) return;
   
-  btn.addEventListener('click', async () => {
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
     try {
-      let embedUrl = '';
-      const isAnimeTitle = await checkIsAnime(type, item.id, item);
+      const path = type === 'tv' ? `/tv/tv:${item.id}` : `/movies/movie:${item.id}`;
+      const url = `${path}?play=true`;
       
-      if (isAnimeTitle) {
-        const tmdbId = item.id;
-        embedUrl = getAnimeEmbedUrl(type, tmdbId, 1, 1, 'sub');
-        openPlayerModal(embedUrl, true, tmdbId, 1, 1, type);
-      } else {
-        if (type === 'movie') {
-          const tmdbId = item.id;
-          embedUrl = `https://vidsrc.cc/v2/embed/movie/${tmdbId}?autoPlay=false`;
-          openPlayerModal(embedUrl);
-        } else if (type === 'tv') {
-          try {
-            const externalIds = await fetchTMDBData(`/tv/${item.id}/external_ids`);
-            const imdbId = externalIds?.imdb_id;
-            if (imdbId) {
-              embedUrl = `https://vidsrc.cc/v2/embed/tv/${imdbId}?autoPlay=false`;
-              openPlayerModal(embedUrl);
-            } else {
-              console.error('No IMDB ID found for TV show');
-              return;
-            }
-          } catch (error) {
-            console.error('Failed to fetch IMDB ID:', error);
-            return;
-          }
-        }
+      if (e && (e.ctrlKey || e.metaKey)) {
+        const pretty = url.startsWith('/movie-night') ? url : `/movie-night${url}`;
+        try { window.open(pretty, '_blank', 'noopener,noreferrer'); } catch {}
+        return;
       }
+      
+      try {
+        const pretty = url.startsWith('/movie-night') ? url : `/movie-night${url}`;
+        window.location.href = pretty;
+      } catch {}
     } catch (error) {
-      console.error('Failed to open player:', error);
+      console.error('Failed to navigate to details page:', error);
     }
   });
 }
@@ -143,8 +128,6 @@ function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, e
   document.addEventListener('keydown', handleEsc);
 }
 
-// Public Exports
-
 /**
  * Initialize a catalog page according to a configuration.
  * @param {Object} config
@@ -207,8 +190,6 @@ export function createTVConfig() {
     getGenreName: (id) => defaultGetGenreName(id, 'tv')
   };
 }
-
-// UI Setup Functions (Private)
 
 /**
  * Default genre name resolver
@@ -434,8 +415,6 @@ function setupGenres(config) {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { genresPanel.classList.remove('open'); genresToggle.setAttribute('aria-expanded', 'false'); genresToggle.focus(); } });
 }
 
-// Filter & Configuration Functions (Private)
-
 /**
  * Resolve current filter state from UI
  * @returns {Object}
@@ -503,8 +482,6 @@ function createGenreRailSection(genreId, title, fetchFunction) {
   return section;
 }
 
-// Hero & Featured Content Functions (Private)
-
 /**
  * Start the featured hero carousel
  * @param {Object} config
@@ -568,7 +545,6 @@ async function startFeaturedHero(config, filters) {
         const images = await fetchTitleImages(mediaType, item.id);
         const filePath = selectPreferredImage(images, true);
         if (filePath) {
-          // Determine if it's a backdrop or poster based on aspect ratio heuristic
           const isBackdrop = isBackdropImage(filePath, images);
           return isBackdrop ? img.backdrop(filePath) : img.poster(filePath);
         }
@@ -625,7 +601,6 @@ async function startFeaturedHero(config, filters) {
           </div>`;
         contentEl.classList.add('slide-enter');
         
-        // Attach Watch Now handler
         const watchNowBtn = contentEl.querySelector('.watch-now');
         if (watchNowBtn) {
           attachWatchNowHandler(watchNowBtn, mediaType, item);
@@ -665,8 +640,6 @@ async function startFeaturedHero(config, filters) {
     hero.classList.remove('loading');
   }
 }
-
-// Data Fetching Functions (Private)
 
 /**
  * Find base genres for rail generation
@@ -739,8 +712,6 @@ function buildFetcherFactory(config, filters, seenIds) {
     return { results };
   };
 }
-
-// Rendering Functions (Private)
 
 /**
  * Render infinite-scroll grid view
@@ -887,7 +858,6 @@ async function renderGrid(config, filters) {
               } else {
               hasMore = false;
               clearSkeletons();
-                // Empty state messaging
                 const empty = document.createElement('div');
                 empty.style.padding = '16px 0';
                 empty.style.color = 'var(--muted)';
