@@ -72,8 +72,7 @@ export function disposeUI() {
  * @param {string} [movie.media_type]
  * @returns {HTMLElement}
  */
-export function createMovieCard(movie, options = {}) {
-  const { skipRandomPoster = false } = options;
+export function createMovieCard(movie) {
   const card = document.createElement('article');
   card.className = 'movie-card';
   try { card.setAttribute('tabindex', '0'); } catch {}
@@ -84,8 +83,6 @@ export function createMovieCard(movie, options = {}) {
   if (posterChoiceCache.has(choiceKey)) {
     const chosenPath = posterChoiceCache.get(choiceKey);
     posterUrl = chosenPath ? img.poster(chosenPath) : (movie.poster_path ? img.poster(movie.poster_path) : null);
-  } else if (movie.poster_path) {
-    posterUrl = img.poster(movie.poster_path);
   }
   const rating = typeof movie.vote_average === 'number' ? movie.vote_average.toFixed(1) : 'N/A';
   const title = movie.title || movie.name || '';
@@ -113,110 +110,48 @@ export function createMovieCard(movie, options = {}) {
   `;
 
   if (posterUrl) {
-    const imgEl = card.querySelector('.poster-img');
-    if (imgEl) {
-      imgEl.addEventListener('load', () => { imgEl.classList.add('loaded'); });
-      if (imgEl.complete) imgEl.classList.add('loaded');
+    const img = card.querySelector('.poster-img');
+    if (img) {
+      img.addEventListener('load', () => { img.classList.add('loaded'); });
+      if (img.complete) img.classList.add('loaded');
     }
   }
 
-  if (!skipRandomPoster) {
-    try {
-      const useRandom = !!(movie && (movie.backdrop_path || movie.poster_path));
-      if (useRandom) {
-        (async () => {
-          const images = await getTitleImages(movie.id, mediaType);
-          const posters = Array.isArray(images?.posters) ? images.posters : [];
-          let chosenPath = null;
-          if (posterChoiceCache.has(choiceKey)) {
-            chosenPath = posterChoiceCache.get(choiceKey);
-          } else if (posters.length) {
-            const list = preferEnglishImages(posters);
-            const pick = list[Math.floor(Math.random() * list.length)];
-            chosenPath = pick && pick.file_path ? pick.file_path : null;
-            posterChoiceCache.set(choiceKey, chosenPath);
+  try {
+    const useRandom = !!(movie && (movie.backdrop_path || movie.poster_path));
+    if (useRandom) {
+      (async () => {
+        const images = await getTitleImages(movie.id, mediaType);
+        const posters = Array.isArray(images?.posters) ? images.posters : [];
+        let chosenPath = null;
+        if (posterChoiceCache.has(choiceKey)) {
+          chosenPath = posterChoiceCache.get(choiceKey);
+        } else if (posters.length) {
+          const list = preferEnglishImages(posters);
+          const pick = list[Math.floor(Math.random() * list.length)];
+          chosenPath = pick && pick.file_path ? pick.file_path : null;
+          posterChoiceCache.set(choiceKey, chosenPath);
+        }
+        const targetSrc = chosenPath ? img.poster(chosenPath) : (movie.poster_path ? img.poster(movie.poster_path) : null);
+        const existingImg = card.querySelector('.poster-img');
+        if (existingImg) {
+          if (targetSrc && targetSrc !== existingImg.getAttribute('src')) {
+            existingImg.addEventListener('load', () => { existingImg.classList.add('loaded'); }, { once: true });
+            existingImg.setAttribute('src', targetSrc);
           }
-          const targetSrc = chosenPath ? img.poster(chosenPath) : (movie.poster_path ? img.poster(movie.poster_path) : null);
-          const existingImg = card.querySelector('.poster-img');
-          if (existingImg) {
-            if (targetSrc && targetSrc !== existingImg.getAttribute('src')) {
-              existingImg.addEventListener('load', () => { existingImg.classList.add('loaded'); }, { once: true });
-              existingImg.setAttribute('src', targetSrc);
-            }
-          } else if (targetSrc) {
-            const skel = card.querySelector('.poster-skeleton');
-            const newImg = document.createElement('img');
-            newImg.className = 'poster-img';
-            newImg.setAttribute('alt', title);
-            newImg.setAttribute('loading', 'lazy');
-            newImg.addEventListener('load', () => { newImg.classList.add('loaded'); }, { once: true });
-            newImg.src = targetSrc;
-            if (skel && skel.parentNode) skel.parentNode.replaceChild(newImg, skel);
-          }
-        })();
-      }
-    } catch {}
-  }
-
-  requestAnimationFrame(() => adjustOverlayHeightFor(card));
-  const ro = ensureCardOverlayResizeObserver();
-  ro.observe(card);
-  return card;
-}
-
-/**
- * Create a person card element from a TMDB person result
- * @param {Object} person
- * @param {number} person.id
- * @param {string} person.name
- * @param {string} [person.profile_path]
- * @param {string} [person.known_for_department]
- * @param {Array} [person.known_for]
- * @returns {HTMLElement}
- */
-export function createPersonCard(person) {
-  const card = document.createElement('article');
-  card.className = 'movie-card person-card';
-  try { card.setAttribute('tabindex', '0'); } catch {}
-
-  const name = person.name || 'Unknown';
-  const profileUrl = person.profile_path ? img.poster(person.profile_path) : null;
-  const department = person.known_for_department || 'Actor';
-  const knownFor = Array.isArray(person.known_for) ? person.known_for : [];
-
-  const knownForText = knownFor
-    .slice(0, 2)
-    .map(item => item.title || item.name || '')
-    .filter(Boolean)
-    .join(', ') || '';
-
-  try { 
-    card.setAttribute('data-id', String(person.id)); 
-    card.setAttribute('data-type', 'person'); 
+        } else if (targetSrc) {
+          const skel = card.querySelector('.poster-skeleton');
+          const newImg = document.createElement('img');
+          newImg.className = 'poster-img';
+          newImg.setAttribute('alt', title);
+          newImg.setAttribute('loading', 'lazy');
+          newImg.addEventListener('load', () => { newImg.classList.add('loaded'); }, { once: true });
+          newImg.src = targetSrc;
+          if (skel && skel.parentNode) skel.parentNode.replaceChild(newImg, skel);
+        }
+      })();
+    }
   } catch {}
-
-  card.innerHTML = `
-    ${profileUrl ? `<img src="${profileUrl}" alt="${name}" class="poster-img" loading="lazy">` : '<div class="poster-skeleton"></div>'}
-    <div class="movie-info">
-      <h3 class="movie-title">${name}</h3>
-    </div>
-    <div class="movie-overlay">
-      <div class="overlay-content">
-        <div class="overlay-tags">
-          <span class="meta-tag type">${department}</span>
-        </div>
-        ${knownForText ? `<div class="overlay-genres">${knownForText}</div>` : ''}
-      </div>
-    </div>
-  `;
-
-  if (profileUrl) {
-    const imgEl = card.querySelector('.poster-img');
-    if (imgEl) {
-      imgEl.addEventListener('load', () => { imgEl.classList.add('loaded'); });
-      if (imgEl.complete) imgEl.classList.add('loaded');
-    }
-  }
 
   requestAnimationFrame(() => adjustOverlayHeightFor(card));
   const ro = ensureCardOverlayResizeObserver();
@@ -252,18 +187,6 @@ export function startMovieCards() {
     
     const id = card.getAttribute('data-id');
     const type = card.getAttribute('data-type') || 'movie';
-    const isPersonCard = card.classList.contains('person-card');
-    
-    if (isPersonCard) {
-      const nameEl = card.querySelector('.movie-title');
-      const name = nameEl ? nameEl.textContent : '';
-      if (id && name) {
-        const query = encodeURIComponent(name);
-        const path = `/search?q=${query}&person=${id}`;
-        attachCardNavigationHandlers(card, path);
-      }
-      return;
-    }
     
     const btn = document.createElement('button');
     btn.className = 'card-add';
