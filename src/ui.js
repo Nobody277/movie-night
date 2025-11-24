@@ -72,7 +72,8 @@ export function disposeUI() {
  * @param {string} [movie.media_type]
  * @returns {HTMLElement}
  */
-export function createMovieCard(movie) {
+export function createMovieCard(movie, options = {}) {
+  const { skipRandomPoster = false } = options;
   const card = document.createElement('article');
   card.className = 'movie-card';
   try { card.setAttribute('tabindex', '0'); } catch {}
@@ -83,6 +84,8 @@ export function createMovieCard(movie) {
   if (posterChoiceCache.has(choiceKey)) {
     const chosenPath = posterChoiceCache.get(choiceKey);
     posterUrl = chosenPath ? img.poster(chosenPath) : (movie.poster_path ? img.poster(movie.poster_path) : null);
+  } else if (movie.poster_path) {
+    posterUrl = img.poster(movie.poster_path);
   }
   const rating = typeof movie.vote_average === 'number' ? movie.vote_average.toFixed(1) : 'N/A';
   const title = movie.title || movie.name || '';
@@ -110,48 +113,50 @@ export function createMovieCard(movie) {
   `;
 
   if (posterUrl) {
-    const img = card.querySelector('.poster-img');
-    if (img) {
-      img.addEventListener('load', () => { img.classList.add('loaded'); });
-      if (img.complete) img.classList.add('loaded');
+    const imgEl = card.querySelector('.poster-img');
+    if (imgEl) {
+      imgEl.addEventListener('load', () => { imgEl.classList.add('loaded'); });
+      if (imgEl.complete) imgEl.classList.add('loaded');
     }
   }
 
-  try {
-    const useRandom = !!(movie && (movie.backdrop_path || movie.poster_path));
-    if (useRandom) {
-      (async () => {
-        const images = await getTitleImages(movie.id, mediaType);
-        const posters = Array.isArray(images?.posters) ? images.posters : [];
-        let chosenPath = null;
-        if (posterChoiceCache.has(choiceKey)) {
-          chosenPath = posterChoiceCache.get(choiceKey);
-        } else if (posters.length) {
-          const list = preferEnglishImages(posters);
-          const pick = list[Math.floor(Math.random() * list.length)];
-          chosenPath = pick && pick.file_path ? pick.file_path : null;
-          posterChoiceCache.set(choiceKey, chosenPath);
-        }
-        const targetSrc = chosenPath ? img.poster(chosenPath) : (movie.poster_path ? img.poster(movie.poster_path) : null);
-        const existingImg = card.querySelector('.poster-img');
-        if (existingImg) {
-          if (targetSrc && targetSrc !== existingImg.getAttribute('src')) {
-            existingImg.addEventListener('load', () => { existingImg.classList.add('loaded'); }, { once: true });
-            existingImg.setAttribute('src', targetSrc);
+  if (!skipRandomPoster) {
+    try {
+      const useRandom = !!(movie && (movie.backdrop_path || movie.poster_path));
+      if (useRandom) {
+        (async () => {
+          const images = await getTitleImages(movie.id, mediaType);
+          const posters = Array.isArray(images?.posters) ? images.posters : [];
+          let chosenPath = null;
+          if (posterChoiceCache.has(choiceKey)) {
+            chosenPath = posterChoiceCache.get(choiceKey);
+          } else if (posters.length) {
+            const list = preferEnglishImages(posters);
+            const pick = list[Math.floor(Math.random() * list.length)];
+            chosenPath = pick && pick.file_path ? pick.file_path : null;
+            posterChoiceCache.set(choiceKey, chosenPath);
           }
-        } else if (targetSrc) {
-          const skel = card.querySelector('.poster-skeleton');
-          const newImg = document.createElement('img');
-          newImg.className = 'poster-img';
-          newImg.setAttribute('alt', title);
-          newImg.setAttribute('loading', 'lazy');
-          newImg.addEventListener('load', () => { newImg.classList.add('loaded'); }, { once: true });
-          newImg.src = targetSrc;
-          if (skel && skel.parentNode) skel.parentNode.replaceChild(newImg, skel);
-        }
-      })();
-    }
-  } catch {}
+          const targetSrc = chosenPath ? img.poster(chosenPath) : (movie.poster_path ? img.poster(movie.poster_path) : null);
+          const existingImg = card.querySelector('.poster-img');
+          if (existingImg) {
+            if (targetSrc && targetSrc !== existingImg.getAttribute('src')) {
+              existingImg.addEventListener('load', () => { existingImg.classList.add('loaded'); }, { once: true });
+              existingImg.setAttribute('src', targetSrc);
+            }
+          } else if (targetSrc) {
+            const skel = card.querySelector('.poster-skeleton');
+            const newImg = document.createElement('img');
+            newImg.className = 'poster-img';
+            newImg.setAttribute('alt', title);
+            newImg.setAttribute('loading', 'lazy');
+            newImg.addEventListener('load', () => { newImg.classList.add('loaded'); }, { once: true });
+            newImg.src = targetSrc;
+            if (skel && skel.parentNode) skel.parentNode.replaceChild(newImg, skel);
+          }
+        })();
+      }
+    } catch {}
+  }
 
   requestAnimationFrame(() => adjustOverlayHeightFor(card));
   const ro = ensureCardOverlayResizeObserver();

@@ -641,171 +641,210 @@ function startSearchPage() {
  * Set up search filter controls
  */
 async function setupSearchFilters() {
-  const mediaTypeToggle = document.querySelector('.media-type-toggle');
-  const sortToggle = document.querySelector('.sort-toggle');
-  const timeToggle = document.querySelector('.time-toggle');
-  const genresToggle = document.querySelector('.genres-toggle');
-  const clearFiltersBtn = document.querySelector('.clear-filters');
-  
-  if (mediaTypeToggle) {
-    const mediaTypeMenu = document.getElementById('media-type-menu');
-    if (mediaTypeMenu) {
-      mediaTypeToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        mediaTypeMenu.classList.toggle('open');
-        document.getElementById('sort-menu')?.classList.remove('open');
-        document.getElementById('time-menu')?.classList.remove('open');
-        document.getElementById('genres-panel')?.classList.remove('open');
-      });
-      
-      mediaTypeMenu.querySelectorAll('.media-type-option').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const label = btn.dataset.label || 'All';
-          const value = btn.dataset.value || 'all';
-          mediaTypeToggle.querySelector('.media-type-label').textContent = label;
-          mediaTypeToggle.setAttribute('data-value', value);
-          mediaTypeMenu.classList.remove('open');
-          applySearchFilters();
-        });
-      });
+  try {
+    const controlsRow = document.querySelector('.controls-row');
+    if (!controlsRow) {
+      console.warn('Controls row not found, filters may not be available');
+      return;
     }
-  }
-  
-  if (sortToggle) {
-    const sortMenu = document.getElementById('sort-menu');
-    if (sortMenu) {
-      sortToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        sortMenu.classList.toggle('open');
-        document.getElementById('media-type-menu')?.classList.remove('open');
-        document.getElementById('time-menu')?.classList.remove('open');
-        document.getElementById('genres-panel')?.classList.remove('open');
-      });
-      
-      sortMenu.querySelectorAll('.sort-option').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const label = btn.dataset.label || 'Relevance';
-          const dir = btn.dataset.dir || 'desc';
-          sortToggle.querySelector('.sort-label').textContent = label;
-          sortToggle.querySelector('.sort-arrow').setAttribute('data-dir', dir);
-          sortToggle.querySelector('.sort-arrow').textContent = dir === 'asc' ? '↑' : '↓';
-          sortMenu.classList.remove('open');
-          applySearchFilters();
-        });
-      });
-    }
-  }
-  
-  if (timeToggle) {
-    const timeMenu = document.getElementById('time-menu');
-    if (timeMenu) {
-      timeToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        timeMenu.classList.toggle('open');
-        document.getElementById('media-type-menu')?.classList.remove('open');
-        document.getElementById('sort-menu')?.classList.remove('open');
-        document.getElementById('genres-panel')?.classList.remove('open');
-      });
-      
-      timeMenu.querySelectorAll('.time-option').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const label = btn.dataset.label || 'All time';
-          const value = btn.dataset.value || 'all';
-          timeToggle.querySelector('.time-label').textContent = label;
-          timeToggle.setAttribute('data-value', value);
-          timeMenu.classList.remove('open');
-          applySearchFilters();
-        });
-      });
-    }
-  }
-  
-  if (genresToggle) {
-    const genresPanel = document.getElementById('genres-panel');
-    const genresList = genresPanel?.querySelector('.genres-list');
     
-    if (genresList) {
-      try {
-        const [movieGenres, tvGenres] = await Promise.all([
-          getAllMovieGenres(),
-          getAllTVGenres()
-        ]);
-        
-        const allGenres = new Map();
-        if (Array.isArray(movieGenres)) {
-          movieGenres.forEach(g => {
-            if (!allGenres.has(g.id)) allGenres.set(g.id, g.name);
+    const mediaTypeToggle = document.querySelector('.media-type-toggle');
+    const sortToggle = document.querySelector('.sort-toggle');
+    const timeToggle = document.querySelector('.time-toggle');
+    const genresToggle = document.querySelector('.genres-toggle');
+    const clearFiltersBtn = document.querySelector('.clear-filters');
+    
+    if (!mediaTypeToggle || !sortToggle || !timeToggle || !genresToggle) {
+      console.warn('Some filter elements not found');
+      return;
+    }
+    
+    if (mediaTypeToggle) {
+      const mediaTypeMenu = document.getElementById('media-type-menu');
+      if (mediaTypeMenu) {
+        const existingHandler = mediaTypeToggle.dataset.handlerAttached;
+        if (!existingHandler) {
+          mediaTypeToggle.dataset.handlerAttached = 'true';
+          mediaTypeToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            mediaTypeMenu.classList.toggle('open');
+            document.getElementById('sort-menu')?.classList.remove('open');
+            document.getElementById('time-menu')?.classList.remove('open');
+            document.getElementById('genres-panel')?.classList.remove('open');
+          });
+          
+          mediaTypeMenu.querySelectorAll('.media-type-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const label = btn.dataset.label || 'All';
+              const value = btn.dataset.value || 'all';
+              mediaTypeToggle.querySelector('.media-type-label').textContent = label;
+              mediaTypeToggle.setAttribute('data-value', value);
+              mediaTypeMenu.classList.remove('open');
+              applySearchFilters();
+            });
           });
         }
-        if (Array.isArray(tvGenres)) {
-          tvGenres.forEach(g => {
-            if (!allGenres.has(g.id)) allGenres.set(g.id, g.name);
+      }
+    }
+  
+    if (sortToggle) {
+      const sortMenu = document.getElementById('sort-menu');
+      if (sortMenu) {
+        const existingHandler = sortToggle.dataset.handlerAttached;
+        if (!existingHandler) {
+          sortToggle.dataset.handlerAttached = 'true';
+          sortToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sortMenu.classList.toggle('open');
+            document.getElementById('media-type-menu')?.classList.remove('open');
+            document.getElementById('time-menu')?.classList.remove('open');
+            document.getElementById('genres-panel')?.classList.remove('open');
+          });
+          
+          sortMenu.querySelectorAll('.sort-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const label = btn.dataset.label || 'Relevance';
+              const dir = btn.dataset.dir || 'desc';
+              sortToggle.querySelector('.sort-label').textContent = label;
+              sortToggle.querySelector('.sort-arrow').setAttribute('data-dir', dir);
+              sortToggle.querySelector('.sort-arrow').textContent = dir === 'asc' ? '↑' : '↓';
+              sortMenu.classList.remove('open');
+              applySearchFilters();
+            });
           });
         }
-        
-        const sortedGenres = Array.from(allGenres.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-        
-        genresList.innerHTML = sortedGenres.map(([id, name]) => `
-          <li>
-            <input class="genre-input" type="checkbox" id="search-g-${id}" data-genre-id="${id}">
-            <label class="genre-label" for="search-g-${id}">${name}</label>
-          </li>
-        `).join('');
-        
-        genresList.querySelectorAll('.genre-input').forEach(input => {
-          input.addEventListener('change', () => {
-            updateGenresCounter();
-            applySearchFilters();
-          });
-        });
-      } catch (error) {
-        console.error('Failed to load genres:', error);
       }
     }
     
-    if (genresPanel) {
-      genresToggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        genresPanel.classList.toggle('open');
-        genresToggle.setAttribute('aria-expanded', genresPanel.classList.contains('open'));
-        document.getElementById('media-type-menu')?.classList.remove('open');
-        document.getElementById('sort-menu')?.classList.remove('open');
-        document.getElementById('time-menu')?.classList.remove('open');
+    if (timeToggle) {
+      const timeMenu = document.getElementById('time-menu');
+      if (timeMenu) {
+        const existingHandler = timeToggle.dataset.handlerAttached;
+        if (!existingHandler) {
+          timeToggle.dataset.handlerAttached = 'true';
+          timeToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            timeMenu.classList.toggle('open');
+            document.getElementById('media-type-menu')?.classList.remove('open');
+            document.getElementById('sort-menu')?.classList.remove('open');
+            document.getElementById('genres-panel')?.classList.remove('open');
+          });
+          
+          timeMenu.querySelectorAll('.time-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const label = btn.dataset.label || 'All time';
+              const value = btn.dataset.value || 'all';
+              timeToggle.querySelector('.time-label').textContent = label;
+              timeToggle.setAttribute('data-value', value);
+              timeMenu.classList.remove('open');
+              applySearchFilters();
+            });
+          });
+        }
+      }
+    }
+  
+    if (genresToggle) {
+      const genresPanel = document.getElementById('genres-panel');
+      const genresList = genresPanel?.querySelector('.genres-list');
+      
+      if (genresList && genresList.children.length === 0) {
+        try {
+          const [movieGenres, tvGenres] = await Promise.all([
+            getAllMovieGenres(),
+            getAllTVGenres()
+          ]);
+          
+          const allGenres = new Map();
+          if (Array.isArray(movieGenres)) {
+            movieGenres.forEach(g => {
+              if (!allGenres.has(g.id)) allGenres.set(g.id, g.name);
+            });
+          }
+          if (Array.isArray(tvGenres)) {
+            tvGenres.forEach(g => {
+              if (!allGenres.has(g.id)) allGenres.set(g.id, g.name);
+            });
+          }
+          
+          const sortedGenres = Array.from(allGenres.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+          
+          genresList.innerHTML = sortedGenres.map(([id, name]) => `
+            <li>
+              <input class="genre-input" type="checkbox" id="search-g-${id}" data-genre-id="${id}">
+              <label class="genre-label" for="search-g-${id}">${name}</label>
+            </li>
+          `).join('');
+          
+          genresList.querySelectorAll('.genre-input').forEach(input => {
+            input.addEventListener('change', () => {
+              updateGenresCounter();
+              applySearchFilters();
+            });
+          });
+        } catch (error) {
+          console.error('Failed to load genres:', error);
+        }
+      }
+      
+      if (genresPanel) {
+        const existingHandler = genresToggle.dataset.handlerAttached;
+        if (!existingHandler) {
+          genresToggle.dataset.handlerAttached = 'true';
+          genresToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            genresPanel.classList.toggle('open');
+            genresToggle.setAttribute('aria-expanded', genresPanel.classList.contains('open'));
+            document.getElementById('media-type-menu')?.classList.remove('open');
+            document.getElementById('sort-menu')?.classList.remove('open');
+            document.getElementById('time-menu')?.classList.remove('open');
+          });
+        }
+      }
+    }
+    
+    if (clearFiltersBtn) {
+      const existingHandler = clearFiltersBtn.dataset.handlerAttached;
+      if (!existingHandler) {
+        clearFiltersBtn.dataset.handlerAttached = 'true';
+        clearFiltersBtn.addEventListener('click', () => {
+          if (mediaTypeToggle) {
+            mediaTypeToggle.querySelector('.media-type-label').textContent = 'All';
+            mediaTypeToggle.setAttribute('data-value', 'all');
+          }
+          if (sortToggle) {
+            sortToggle.querySelector('.sort-label').textContent = 'Relevance';
+            sortToggle.querySelector('.sort-arrow').setAttribute('data-dir', 'desc');
+            sortToggle.querySelector('.sort-arrow').textContent = '↓';
+          }
+          if (timeToggle) {
+            timeToggle.querySelector('.time-label').textContent = 'All time';
+            timeToggle.setAttribute('data-value', 'all');
+          }
+          document.querySelectorAll('.genre-input').forEach(input => {
+            input.checked = false;
+          });
+          updateGenresCounter();
+          applySearchFilters();
+        });
+      }
+    }
+    
+    let clickHandlerAttached = document.body.dataset.searchFiltersClickHandler;
+    if (!clickHandlerAttached) {
+      document.body.dataset.searchFiltersClickHandler = 'true';
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.controls-row')) {
+          document.getElementById('media-type-menu')?.classList.remove('open');
+          document.getElementById('sort-menu')?.classList.remove('open');
+          document.getElementById('time-menu')?.classList.remove('open');
+          document.getElementById('genres-panel')?.classList.remove('open');
+        }
       });
     }
+  } catch (error) {
+    console.error('Failed to setup search filters:', error);
   }
-  
-  if (clearFiltersBtn) {
-    clearFiltersBtn.addEventListener('click', () => {
-      if (mediaTypeToggle) {
-        mediaTypeToggle.querySelector('.media-type-label').textContent = 'All';
-        mediaTypeToggle.setAttribute('data-value', 'all');
-      }
-      if (sortToggle) {
-        sortToggle.querySelector('.sort-label').textContent = 'Relevance';
-        sortToggle.querySelector('.sort-arrow').setAttribute('data-dir', 'desc');
-        sortToggle.querySelector('.sort-arrow').textContent = '↓';
-      }
-      if (timeToggle) {
-        timeToggle.querySelector('.time-label').textContent = 'All time';
-        timeToggle.setAttribute('data-value', 'all');
-      }
-      document.querySelectorAll('.genre-input').forEach(input => {
-        input.checked = false;
-      });
-      updateGenresCounter();
-      applySearchFilters();
-    });
-  }
-  
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.controls-row')) {
-      document.getElementById('media-type-menu')?.classList.remove('open');
-      document.getElementById('sort-menu')?.classList.remove('open');
-      document.getElementById('time-menu')?.classList.remove('open');
-      document.getElementById('genres-panel')?.classList.remove('open');
-    }
-  });
 }
 
 /**
@@ -940,7 +979,7 @@ async function performSearch(query) {
           }
           
           allCredits.forEach(item => {
-            const card = createMovieCard(item);
+            const card = createMovieCard(item, { skipRandomPoster: true });
             grid.appendChild(card);
           });
           startMovieCards();
