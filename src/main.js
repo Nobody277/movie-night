@@ -630,7 +630,9 @@ function startSearchPage() {
     }
   }
   
-  setupSearchFilters();
+  setTimeout(() => {
+    setupSearchFilters();
+  }, 100);
   
   if (query) {
     performSearch(query);
@@ -640,11 +642,34 @@ function startSearchPage() {
 /**
  * Set up search filter controls
  */
+let searchFiltersSetupInProgress = false;
+
 async function setupSearchFilters() {
+  if (searchFiltersSetupInProgress) {
+    return;
+  }
+  
   try {
-    const controlsRow = document.querySelector('.controls-row');
+    searchFiltersSetupInProgress = true;
+    
+    let controlsRow = document.querySelector('.controls-row');
     if (!controlsRow) {
-      console.warn('Controls row not found, filters may not be available');
+      await new Promise(resolve => {
+        let attempts = 0;
+        const maxAttempts = 20;
+        const checkInterval = setInterval(() => {
+          controlsRow = document.querySelector('.controls-row');
+          attempts++;
+          if (controlsRow || attempts >= maxAttempts) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 50);
+      });
+    }
+    
+    if (!controlsRow) {
+      searchFiltersSetupInProgress = false;
       return;
     }
     
@@ -655,7 +680,7 @@ async function setupSearchFilters() {
     const clearFiltersBtn = document.querySelector('.clear-filters');
     
     if (!mediaTypeToggle || !sortToggle || !timeToggle || !genresToggle) {
-      console.warn('Some filter elements not found');
+      searchFiltersSetupInProgress = false;
       return;
     }
     
@@ -844,6 +869,8 @@ async function setupSearchFilters() {
     }
   } catch (error) {
     console.error('Failed to setup search filters:', error);
+  } finally {
+    searchFiltersSetupInProgress = false;
   }
 }
 
