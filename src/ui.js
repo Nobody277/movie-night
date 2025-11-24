@@ -160,6 +160,66 @@ export function createMovieCard(movie) {
 }
 
 /**
+ * Create a person card element from a TMDB person result
+ * @param {Object} person
+ * @param {number} person.id
+ * @param {string} person.name
+ * @param {string} [person.profile_path]
+ * @param {string} [person.known_for_department]
+ * @param {Array} [person.known_for]
+ * @returns {HTMLElement}
+ */
+export function createPersonCard(person) {
+  const card = document.createElement('article');
+  card.className = 'movie-card person-card';
+  try { card.setAttribute('tabindex', '0'); } catch {}
+
+  const name = person.name || 'Unknown';
+  const profileUrl = person.profile_path ? img.poster(person.profile_path) : null;
+  const department = person.known_for_department || 'Actor';
+  const knownFor = Array.isArray(person.known_for) ? person.known_for : [];
+
+  const knownForText = knownFor
+    .slice(0, 2)
+    .map(item => item.title || item.name || '')
+    .filter(Boolean)
+    .join(', ') || '';
+
+  try { 
+    card.setAttribute('data-id', String(person.id)); 
+    card.setAttribute('data-type', 'person'); 
+  } catch {}
+
+  card.innerHTML = `
+    ${profileUrl ? `<img src="${profileUrl}" alt="${name}" class="poster-img" loading="lazy">` : '<div class="poster-skeleton"></div>'}
+    <div class="movie-info">
+      <h3 class="movie-title">${name}</h3>
+    </div>
+    <div class="movie-overlay">
+      <div class="overlay-content">
+        <div class="overlay-tags">
+          <span class="meta-tag type">${department}</span>
+        </div>
+        ${knownForText ? `<div class="overlay-genres">${knownForText}</div>` : ''}
+      </div>
+    </div>
+  `;
+
+  if (profileUrl) {
+    const imgEl = card.querySelector('.poster-img');
+    if (imgEl) {
+      imgEl.addEventListener('load', () => { imgEl.classList.add('loaded'); });
+      if (imgEl.complete) imgEl.classList.add('loaded');
+    }
+  }
+
+  requestAnimationFrame(() => adjustOverlayHeightFor(card));
+  const ro = ensureCardOverlayResizeObserver();
+  ro.observe(card);
+  return card;
+}
+
+/**
  * Create a skeleton placeholder card for loading states.
  * @returns {HTMLElement}
  */
@@ -187,6 +247,18 @@ export function startMovieCards() {
     
     const id = card.getAttribute('data-id');
     const type = card.getAttribute('data-type') || 'movie';
+    const isPersonCard = card.classList.contains('person-card');
+    
+    if (isPersonCard) {
+      const nameEl = card.querySelector('.movie-title');
+      const name = nameEl ? nameEl.textContent : '';
+      if (id && name) {
+        const query = encodeURIComponent(name);
+        const path = `/search?q=${query}&person=${id}`;
+        attachCardNavigationHandlers(card, path);
+      }
+      return;
+    }
     
     const btn = document.createElement('button');
     btn.className = 'card-add';

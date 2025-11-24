@@ -1,12 +1,12 @@
 import "./style.css";
 import "./popup-blocker.js";
-import { fetchTMDBData, img } from "./api.js";
+import { fetchTMDBData, img, getAllMovieGenres, getAllTVGenres } from "./api.js";
 import { startBackground, destroyBackground } from "./background.js";
 import { startHomePage } from "./home.js";
 import { startMoviesPage } from "./movies.js";
 import { startTVPage } from "./tv.js";
-import { startRuntimeTags, getGenreName, setupRail, startMovieCards, disposeUI, createMovieCard } from "./ui.js";
-import { sleep, prettyUrlToFile, fileUrlToPretty } from "./utils.js";
+import { startRuntimeTags, getGenreName, setupRail, startMovieCards, disposeUI, createMovieCard, createPersonCard } from "./ui.js";
+import { sleep, prettyUrlToFile, fileUrlToPretty, formatDate } from "./utils.js";
 
 import { PAGE_TRANSITION_DURATION_MS, SEARCH_DEBOUNCE_MS, MAX_SEARCH_RESULTS, CARD_WIDTH_PX, DEFAULT_CONTAINER_WIDTH_PX, MIN_SKELETON_COUNT, MAX_SKELETON_COUNT_SEARCH, MIN_SEARCH_QUERY_LENGTH, TRUNCATION_THRESHOLD_PX, SEARCH_RESULT_GENRE_LIMIT } from "./constants.js";
 
@@ -450,7 +450,12 @@ function startSearchFunctionality() {
       try {
         const data = await fetchTMDBData(`/search/multi?query=${encodeURIComponent(q)}&include_adult=false`);
         let results = Array.isArray(data?.results) ? data.results : [];
-        results = results.filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !!r.poster_path);
+        results = results.filter(r => {
+          if (r.media_type === 'person') {
+            return !!r.profile_path;
+          }
+          return (r.media_type === 'movie' || r.media_type === 'tv') && !!r.poster_path;
+        });
         renderResults(results.slice(0, MAX_SEARCH_RESULTS));
       } catch (e) {
         renderResults([]);
@@ -499,6 +504,13 @@ function startSearchFunctionality() {
       closeSearchResults();
       searchBox.classList.remove('active');
       searchToggle.setAttribute('aria-expanded', 'false');
+      
+      if (item.media_type === 'person') {
+        const query = encodeURIComponent(item.name || '');
+        pageTransition.navigateTo(`/search?q=${query}&person=${item.id}`);
+        return;
+      }
+      
       const mediaType = item.media_type === 'tv' ? 'tv' : 'movie';
       const dest = mediaType === 'tv' ? `/tv/tv:${item.id}` : `/movies/movie:${item.id}`;
       pageTransition.navigateTo(dest);
@@ -512,6 +524,27 @@ function startSearchFunctionality() {
     };
 
     const buildResultHTML = (r) => {
+      if (r.media_type === 'person') {
+        const profile = r.profile_path ? img.poster(r.profile_path) : '';
+        const name = r.name || '';
+        const department = r.known_for_department || 'Actor';
+        const knownFor = Array.isArray(r.known_for) 
+          ? r.known_for.slice(0, 2).map(item => item.title || item.name || '').filter(Boolean).join(', ')
+          : '';
+        return `
+          <div class="search-item" role="option">
+            <img class="search-thumb" src="${profile}" alt="" loading="lazy" />
+            <div>
+              <p class="search-title" title="${name}">${name}</p>
+              <div class="search-meta">
+                <span class="meta-tag type">${department}</span>
+              </div>
+              ${knownFor ? `<div class="search-genres">${knownFor}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }
+      
       const mediaType = r.media_type;
       const poster = r.poster_path ? img.poster(r.poster_path) : '';
       const title = r.title || r.name || '';
@@ -546,17 +579,13 @@ function startSearchFunctionality() {
     resultsEl.setAttribute('role', 'listbox');
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        if (resultsEl.classList.contains('open') && activeIndex >= 0) {
+        const query = searchInput.value.trim();
+        if (query) {
           e.preventDefault();
-          selectItem(activeIndex);
-        } else {
-          const query = searchInput.value.trim();
-          if (query) {
-            e.preventDefault();
-            searchBox.classList.remove('active');
-            searchToggle.setAttribute('aria-expanded', 'false');
-            pageTransition.navigateTo(`/search?q=${encodeURIComponent(query)}`);
-          }
+          closeSearchResults();
+          searchBox.classList.remove('active');
+          searchToggle.setAttribute('aria-expanded', 'false');
+          pageTransition.navigateTo(`/search?q=${encodeURIComponent(query)}`);
         }
         return;
       }
@@ -588,7 +617,226 @@ if (window.p5) {
 function startSearchPage() {
   const urlParams = new URLSearchParams(window.location.search);
   const query = urlParams.get('q');
-  if (query) performSearch(query);
+  const personId = urlParams.get('person');
+  
+  const titleEl = document.querySelector('.section-title');
+  if (titleEl) {
+    if (personId) {
+      titleEl.textContent = 'Filmography';
+    } else if (query) {
+      titleEl.textContent = `Search Results for: ${query}`;
+    } else {
+      titleEl.textContent = 'Search Results';
+    }
+  }
+  
+  setupSearchFilters();
+  
+  if (query) {
+    performSearch(query);
+  }
+}
+
+/**
+ * Set up search filter controls
+ */
+async function setupSearchFilters() {
+  const mediaTypeToggle = document.querySelector('.media-type-toggle');
+  const sortToggle = document.querySelector('.sort-toggle');
+  const timeToggle = document.querySelector('.time-toggle');
+  const genresToggle = document.querySelector('.genres-toggle');
+  const clearFiltersBtn = document.querySelector('.clear-filters');
+  
+  if (mediaTypeToggle) {
+    const mediaTypeMenu = document.getElementById('media-type-menu');
+    if (mediaTypeMenu) {
+      mediaTypeToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        mediaTypeMenu.classList.toggle('open');
+        document.getElementById('sort-menu')?.classList.remove('open');
+        document.getElementById('time-menu')?.classList.remove('open');
+        document.getElementById('genres-panel')?.classList.remove('open');
+      });
+      
+      mediaTypeMenu.querySelectorAll('.media-type-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const label = btn.dataset.label || 'All';
+          const value = btn.dataset.value || 'all';
+          mediaTypeToggle.querySelector('.media-type-label').textContent = label;
+          mediaTypeToggle.setAttribute('data-value', value);
+          mediaTypeMenu.classList.remove('open');
+          applySearchFilters();
+        });
+      });
+    }
+  }
+  
+  if (sortToggle) {
+    const sortMenu = document.getElementById('sort-menu');
+    if (sortMenu) {
+      sortToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sortMenu.classList.toggle('open');
+        document.getElementById('media-type-menu')?.classList.remove('open');
+        document.getElementById('time-menu')?.classList.remove('open');
+        document.getElementById('genres-panel')?.classList.remove('open');
+      });
+      
+      sortMenu.querySelectorAll('.sort-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const label = btn.dataset.label || 'Relevance';
+          const dir = btn.dataset.dir || 'desc';
+          sortToggle.querySelector('.sort-label').textContent = label;
+          sortToggle.querySelector('.sort-arrow').setAttribute('data-dir', dir);
+          sortToggle.querySelector('.sort-arrow').textContent = dir === 'asc' ? '↑' : '↓';
+          sortMenu.classList.remove('open');
+          applySearchFilters();
+        });
+      });
+    }
+  }
+  
+  if (timeToggle) {
+    const timeMenu = document.getElementById('time-menu');
+    if (timeMenu) {
+      timeToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        timeMenu.classList.toggle('open');
+        document.getElementById('media-type-menu')?.classList.remove('open');
+        document.getElementById('sort-menu')?.classList.remove('open');
+        document.getElementById('genres-panel')?.classList.remove('open');
+      });
+      
+      timeMenu.querySelectorAll('.time-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const label = btn.dataset.label || 'All time';
+          const value = btn.dataset.value || 'all';
+          timeToggle.querySelector('.time-label').textContent = label;
+          timeToggle.setAttribute('data-value', value);
+          timeMenu.classList.remove('open');
+          applySearchFilters();
+        });
+      });
+    }
+  }
+  
+  if (genresToggle) {
+    const genresPanel = document.getElementById('genres-panel');
+    const genresList = genresPanel?.querySelector('.genres-list');
+    
+    if (genresList) {
+      try {
+        const [movieGenres, tvGenres] = await Promise.all([
+          getAllMovieGenres(),
+          getAllTVGenres()
+        ]);
+        
+        const allGenres = new Map();
+        if (Array.isArray(movieGenres)) {
+          movieGenres.forEach(g => {
+            if (!allGenres.has(g.id)) allGenres.set(g.id, g.name);
+          });
+        }
+        if (Array.isArray(tvGenres)) {
+          tvGenres.forEach(g => {
+            if (!allGenres.has(g.id)) allGenres.set(g.id, g.name);
+          });
+        }
+        
+        const sortedGenres = Array.from(allGenres.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+        
+        genresList.innerHTML = sortedGenres.map(([id, name]) => `
+          <li>
+            <input class="genre-input" type="checkbox" id="search-g-${id}" data-genre-id="${id}">
+            <label class="genre-label" for="search-g-${id}">${name}</label>
+          </li>
+        `).join('');
+        
+        genresList.querySelectorAll('.genre-input').forEach(input => {
+          input.addEventListener('change', () => {
+            updateGenresCounter();
+            applySearchFilters();
+          });
+        });
+      } catch (error) {
+        console.error('Failed to load genres:', error);
+      }
+    }
+    
+    if (genresPanel) {
+      genresToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        genresPanel.classList.toggle('open');
+        genresToggle.setAttribute('aria-expanded', genresPanel.classList.contains('open'));
+        document.getElementById('media-type-menu')?.classList.remove('open');
+        document.getElementById('sort-menu')?.classList.remove('open');
+        document.getElementById('time-menu')?.classList.remove('open');
+      });
+    }
+  }
+  
+  if (clearFiltersBtn) {
+    clearFiltersBtn.addEventListener('click', () => {
+      if (mediaTypeToggle) {
+        mediaTypeToggle.querySelector('.media-type-label').textContent = 'All';
+        mediaTypeToggle.setAttribute('data-value', 'all');
+      }
+      if (sortToggle) {
+        sortToggle.querySelector('.sort-label').textContent = 'Relevance';
+        sortToggle.querySelector('.sort-arrow').setAttribute('data-dir', 'desc');
+        sortToggle.querySelector('.sort-arrow').textContent = '↓';
+      }
+      if (timeToggle) {
+        timeToggle.querySelector('.time-label').textContent = 'All time';
+        timeToggle.setAttribute('data-value', 'all');
+      }
+      document.querySelectorAll('.genre-input').forEach(input => {
+        input.checked = false;
+      });
+      updateGenresCounter();
+      applySearchFilters();
+    });
+  }
+  
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.controls-row')) {
+      document.getElementById('media-type-menu')?.classList.remove('open');
+      document.getElementById('sort-menu')?.classList.remove('open');
+      document.getElementById('time-menu')?.classList.remove('open');
+      document.getElementById('genres-panel')?.classList.remove('open');
+    }
+  });
+}
+
+/**
+ * Update genres counter display
+ */
+function updateGenresCounter() {
+  const counter = document.querySelector('.genres-counter');
+  const checked = document.querySelectorAll('.genre-input:checked').length;
+  if (counter) {
+    if (checked > 0) {
+      counter.textContent = ` (${checked} selected)`;
+      counter.style.display = '';
+    } else {
+      counter.style.display = 'none';
+    }
+  }
+}
+
+/**
+ * Apply search filters and re-run search
+ */
+function applySearchFilters() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const query = urlParams.get('q');
+  const personId = urlParams.get('person');
+  
+  if (personId) {
+    performSearch(query);
+  } else if (query) {
+    performSearch(query);
+  }
 }
 
 /**
@@ -608,16 +856,179 @@ async function performSearch(query) {
     grid.appendChild(skel);
   }
   try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const personId = urlParams.get('person');
+    
+    if (personId) {
+      try {
+        const personData = await fetchTMDBData(`/person/${personId}`);
+        const creditsData = await fetchTMDBData(`/person/${personId}/combined_credits`);
+        
+        if (personData && creditsData) {
+          const cast = Array.isArray(creditsData.cast) ? creditsData.cast : [];
+          const crew = Array.isArray(creditsData.crew) ? creditsData.crew : [];
+          let allCredits = [...cast, ...crew]
+            .filter((item, index, self) => 
+              index === self.findIndex(t => t.id === item.id && t.media_type === item.media_type)
+            )
+            .filter(item => item.poster_path);
+          
+          const mediaTypeFilter = document.querySelector('.media-type-toggle')?.getAttribute('data-value') || 'all';
+          const sortLabel = document.querySelector('.sort-toggle')?.querySelector('.sort-label')?.textContent || 'Relevance';
+          const sortDir = document.querySelector('.sort-toggle')?.querySelector('.sort-arrow')?.getAttribute('data-dir') || 'desc';
+          const timeValue = document.querySelector('.time-toggle')?.getAttribute('data-value') || 'all';
+          const selectedGenres = Array.from(document.querySelectorAll('.genre-input:checked'))
+            .map(input => Number(input.getAttribute('data-genre-id')))
+            .filter(id => Number.isFinite(id) && id > 0);
+          
+          if (mediaTypeFilter !== 'all') {
+            allCredits = allCredits.filter(item => item.media_type === mediaTypeFilter);
+          }
+          
+          if (selectedGenres.length > 0) {
+            allCredits = allCredits.filter(item => {
+              if (!Array.isArray(item.genre_ids)) return false;
+              return selectedGenres.some(gid => item.genre_ids.includes(gid));
+            });
+          }
+          
+          if (timeValue !== 'all') {
+            const now = new Date();
+            let cutoff = new Date();
+            
+            if (timeValue === 'week') cutoff.setDate(now.getDate() - 7);
+            else if (timeValue === 'month') cutoff.setDate(now.getDate() - 30);
+            else if (timeValue === '6months') cutoff.setMonth(now.getMonth() - 6);
+            else if (timeValue === 'year') cutoff.setFullYear(now.getFullYear() - 1);
+            
+            allCredits = allCredits.filter(item => {
+              const releaseDate = item.release_date || item.first_air_date;
+              if (!releaseDate) return false;
+              return new Date(releaseDate) >= cutoff;
+            });
+          }
+          
+          if (sortLabel !== 'Relevance') {
+            const lower = sortLabel.toLowerCase();
+            allCredits.sort((a, b) => {
+              let aVal, bVal;
+              
+              if (lower.includes('rating')) {
+                aVal = a.vote_average || 0;
+                bVal = b.vote_average || 0;
+              } else if (lower.includes('release') || lower.includes('newest')) {
+                const aDate = a.release_date || a.first_air_date || '';
+                const bDate = b.release_date || b.first_air_date || '';
+                aVal = aDate ? new Date(aDate).getTime() : 0;
+                bVal = bDate ? new Date(bDate).getTime() : 0;
+              } else {
+                aVal = a.popularity || 0;
+                bVal = b.popularity || 0;
+              }
+              
+              if (sortDir === 'asc') {
+                return aVal - bVal;
+              }
+              return bVal - aVal;
+            });
+          }
+          
+          grid.innerHTML = '';
+          if (allCredits.length === 0) {
+            grid.innerHTML = '<div class="no-results">No filmography found.</div>';
+            return;
+          }
+          
+          allCredits.forEach(item => {
+            const card = createMovieCard(item);
+            grid.appendChild(card);
+          });
+          startMovieCards();
+          startRuntimeTags();
+          return;
+        }
+      } catch (personError) {
+        console.error('Failed to load person data:', personError);
+      }
+    }
+    
+    const mediaTypeFilter = document.querySelector('.media-type-toggle')?.getAttribute('data-value') || 'all';
+    const sortLabel = document.querySelector('.sort-toggle')?.querySelector('.sort-label')?.textContent || 'Relevance';
+    const sortDir = document.querySelector('.sort-toggle')?.querySelector('.sort-arrow')?.getAttribute('data-dir') || 'desc';
+    const timeValue = document.querySelector('.time-toggle')?.getAttribute('data-value') || 'all';
+    const selectedGenres = Array.from(document.querySelectorAll('.genre-input:checked'))
+      .map(input => Number(input.getAttribute('data-genre-id')))
+      .filter(id => Number.isFinite(id) && id > 0);
+    
     const data = await fetchTMDBData(`/search/multi?query=${encodeURIComponent(query)}&include_adult=false`);
     let results = Array.isArray(data?.results) ? data.results : [];
-    results = results.filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !!r.poster_path);
+    
+    results = results.filter(r => {
+      if (r.media_type === 'person') {
+        if (mediaTypeFilter !== 'all' && mediaTypeFilter !== 'person') return false;
+        return !!r.profile_path;
+      }
+      if (mediaTypeFilter !== 'all' && r.media_type !== mediaTypeFilter) return false;
+      if (!r.poster_path) return false;
+      
+      if (selectedGenres.length > 0 && Array.isArray(r.genre_ids)) {
+        const hasGenre = selectedGenres.some(gid => r.genre_ids.includes(gid));
+        if (!hasGenre) return false;
+      }
+      
+      if (timeValue !== 'all' && (r.media_type === 'movie' || r.media_type === 'tv')) {
+        const releaseDate = r.release_date || r.first_air_date;
+        if (releaseDate) {
+          const release = new Date(releaseDate);
+          const now = new Date();
+          let cutoff = new Date();
+          
+          if (timeValue === 'week') cutoff.setDate(now.getDate() - 7);
+          else if (timeValue === 'month') cutoff.setDate(now.getDate() - 30);
+          else if (timeValue === '6months') cutoff.setMonth(now.getMonth() - 6);
+          else if (timeValue === 'year') cutoff.setFullYear(now.getFullYear() - 1);
+          
+          if (release < cutoff) return false;
+        }
+      }
+      
+      return true;
+    });
+    
+    if (sortLabel !== 'Relevance') {
+      const lower = sortLabel.toLowerCase();
+      results.sort((a, b) => {
+        let aVal, bVal;
+        
+        if (lower.includes('rating')) {
+          aVal = a.vote_average || 0;
+          bVal = b.vote_average || 0;
+        } else if (lower.includes('release') || lower.includes('newest')) {
+          const aDate = a.release_date || a.first_air_date || '';
+          const bDate = b.release_date || b.first_air_date || '';
+          aVal = aDate ? new Date(aDate).getTime() : 0;
+          bVal = bDate ? new Date(bDate).getTime() : 0;
+        } else {
+          aVal = a.popularity || 0;
+          bVal = b.popularity || 0;
+        }
+        
+        if (sortDir === 'asc') {
+          return aVal - bVal;
+        }
+        return bVal - aVal;
+      });
+    }
+    
     grid.innerHTML = '';
     if (results.length === 0) {
       grid.innerHTML = '<div class="no-results">No results found.</div>';
       return;
     }
-    results.forEach(movie => {
-      const card = createMovieCard(movie);
+    results.forEach(item => {
+      const card = item.media_type === 'person' 
+        ? createPersonCard(item)
+        : createMovieCard(item);
       grid.appendChild(card);
     });
     startMovieCards();

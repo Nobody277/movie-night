@@ -320,7 +320,56 @@ canvas.p5Canvas {
   outline: none;
 }
 
-.genres-toggle:focus-visible, .sort-toggle:focus-visible, .apply-filters:focus-visible, .clear-filters:focus-visible, .time-toggle:focus-visible { border-color: rgba(255,255,255,0.28); }
+.genres-toggle:focus-visible, .sort-toggle:focus-visible, .apply-filters:focus-visible, .clear-filters:focus-visible, .time-toggle:focus-visible, .media-type-toggle:focus-visible { border-color: rgba(255,255,255,0.28); }
+
+.media-type-group { position: relative; }
+.media-type-toggle { 
+  display: inline-flex; 
+  align-items: center; 
+  gap: 8px; 
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.04);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.media-type-toggle:hover { background: rgba(255,255,255,0.08); }
+.media-type-label { color: var(--text); }
+.media-type-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 140px;
+  background: rgba(21,25,35,0.35);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 10px;
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.06);
+  padding: 6px;
+  z-index: 25;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+.media-type-menu.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+.media-type-option {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.media-type-option + .media-type-option { margin-top: 6px; }
+.media-type-option:hover { background: rgba(255,255,255,0.08); }
 
 .sort-group { position: relative; }
 .sort-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
