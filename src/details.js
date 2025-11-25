@@ -1436,7 +1436,7 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
         nonSandboxableWrappers.forEach(wrapper => {
           wrapper.style.display = 'flex';
         });
-        toggleButton.innerHTML = 'Hide unsandboxed sources - We recommend using an ad blocker (<a href="https://chromewebstore.google.com/detail/ddkjiahejlhfcafbddmgiahcphecmpfh?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer" class="toggle-link" onclick="event.stopPropagation()">uBlock</a>)';
+        toggleButton.innerHTML = 'Hide unsandboxed sources - Use an ad blocker fuckass :3 (<a href="https://chromewebstore.google.com/detail/ddkjiahejlhfcafbddmgiahcphecmpfh?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer" class="toggle-link" onclick="event.stopPropagation()">uBlock</a>)';
         allSourcesVisible = true;
         
         const newLinkElement = toggleButton.querySelector('.toggle-link');
