@@ -6,7 +6,7 @@ import { MAX_PROVIDER_ICONS, PROVIDER_CACHE_TTL_MS, PROVIDER_FETCH_TIMEOUT_MS, P
 import { showAddToListMenu, updateAddButton } from "./ui.js";
 import * as listStore from "./list-store.js";
 
-const SOURCES_WITHOUT_SANDBOX = ['111movies', '2embed', 'filmku', 'godrive', 'moviesapi', 'primesrc', 'smashy', 'vidora', 'videasy', 'vidfast', 'vidlink', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidup'];
+const SOURCES_WITHOUT_SANDBOX = ['111movies', '2embed', 'filmku', 'godrive', 'moviesapi', 'primesrc', 'smashy', 'vidora', 'videasy', 'vidfast', 'vidlink', 'vidsrc', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidup'];
 
 const SOURCES = {
   vidsrc: {
