@@ -1163,10 +1163,8 @@ export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
       console.error('No available sources');
       return;
     }
-    
-    // Sort sources alphabetically by name and set first as default
-    availableSources.sort((a, b) => a.name.localeCompare(b.name));
-    const defaultSource = availableSources[0]?.id || null;
+    const sandboxedSource = availableSources.find(s => !SOURCES_WITHOUT_SANDBOX.includes(s.id));
+    const defaultSource = sandboxedSource?.id || availableSources[0]?.id || null;
     
     hero.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
