@@ -1218,6 +1218,99 @@ function attachAddToListHandler(btn, type, details) {
 }
 
 /**
+ * Updates visibility of audio selectors based on active source
+ * @param {HTMLElement} sourceSelector - Source selector container
+ * @param {string} activeSourceId - Currently active source ID
+ * @param {boolean} isAnime - Whether this is an anime title
+ */
+function updateAudioSelectorsVisibility(sourceSelector, activeSourceId, isAnime) {
+  const sourceWrappers = sourceSelector.querySelectorAll('.source-btn-wrapper');
+  sourceWrappers.forEach(wrapper => {
+    const wrapperSourceId = wrapper.dataset.sourceId;
+    const audioSelector = wrapper.querySelector('.source-audio-selector');
+    const shouldShow = isAnime && wrapperSourceId === 'cinetaro' && wrapperSourceId === activeSourceId;
+    
+    if (audioSelector) {
+      audioSelector.style.display = shouldShow ? 'flex' : 'none';
+    }
+  });
+}
+
+/**
+ * Checks if a source can be sandboxed
+ * @param {string} sourceId - Source identifier
+ * @returns {boolean} True if source can be sandboxed
+ */
+function canSandboxSource(sourceId) {
+  return !SOURCES_WITHOUT_SANDBOX.includes(sourceId);
+}
+
+/**
+ * Applies sandbox attribute to iframe based on source
+ * @param {HTMLIFrameElement} iframe - Target iframe element
+ * @param {string} sourceId - Source identifier
+ */
+function applySandboxToIframe(iframe, sourceId) {
+  if (canSandboxSource(sourceId)) {
+    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-presentation');
+  } else {
+    iframe.removeAttribute('sandbox');
+  }
+}
+
+/**
+ * Gets embed URL for a source
+ * @param {Object} sourceObj - Source object
+ * @param {string} type - Media type ('movie' or 'tv')
+ * @param {Object} details - Media details
+ * @param {number} season - Season number
+ * @param {number} episode - Episode number
+ * @param {string} defaultAudio - Default audio track
+ * @returns {string|null} Embed URL or null
+ */
+function getSourceEmbedUrl(sourceObj, type, details, season, episode, defaultAudio) {
+  if (sourceObj.id === 'cinetaro') {
+    return sourceObj.getUrl(type, details, season, episode, defaultAudio);
+  }
+  return sourceObj.getUrl(type, details, season, episode);
+}
+
+/**
+ * Builds HTML for a source button wrapper
+ * @param {Object} source - Source object with id and name
+ * @param {string} defaultSource - ID of the default source
+ * @param {boolean} isAnime - Whether this is an anime title
+ * @param {string} defaultAudio - Default audio track ('sub' or 'dub')
+ * @param {boolean} isHidden - Whether to hide this source initially
+ * @returns {string} HTML string for the source wrapper
+ */
+function buildSourceWrapperHtml(source, defaultSource, isAnime, defaultAudio, isHidden = false) {
+  const isCinetaro = source.id === 'cinetaro';
+  const isActive = source.id === defaultSource;
+  const showAudioButtons = isAnime && isCinetaro && isActive;
+  const hiddenStyle = isHidden ? 'style="display: none;"' : '';
+  const hiddenClass = isHidden ? ' source-non-sandboxable' : '';
+  
+  return `
+    <div class="source-btn-wrapper${hiddenClass}" data-source-id="${source.id}" ${hiddenStyle}>
+      <button 
+        class="source-btn ${isActive ? 'active' : ''}" 
+        data-source="${source.id}"
+        title="${source.name}"
+      >
+        ${source.name}
+      </button>
+      ${showAudioButtons ? `
+        <div class="source-audio-selector">
+          <button class="audio-btn ${defaultAudio === 'sub' ? 'active' : ''}" data-audio="sub">SUB</button>
+          <button class="audio-btn ${defaultAudio === 'dub' ? 'active' : ''}" data-audio="dub">DUB</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/**
  * Show player in hero section
  * @param {HTMLElement} hero
  * @param {string} type
@@ -1250,13 +1343,7 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
   const defaultSourceObj = availableSources.find(s => s.id === defaultSource);
   if (!defaultSourceObj) return;
   
-  let embedUrl = '';
-  if (defaultSource === 'cinetaro') {
-    embedUrl = defaultSourceObj.getUrl(type, details, season, episode, defaultAudio);
-  } else {
-    embedUrl = defaultSourceObj.getUrl(type, details, season, episode);
-  }
-  
+  const embedUrl = getSourceEmbedUrl(defaultSourceObj, type, details, season, episode, defaultAudio);
   if (!embedUrl) return;
   
   const playerContainer = document.createElement('div');
@@ -1264,7 +1351,9 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
   playerContainer.dataset.season = season;
   playerContainer.dataset.episode = episode;
   
-  const useSandbox = !SOURCES_WITHOUT_SANDBOX.includes(defaultSource);
+  const sandboxAttr = canSandboxSource(defaultSource) 
+    ? 'sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"' 
+    : '';
   
   playerContainer.innerHTML = `
     <div class="hero-player-wrapper">
@@ -1272,7 +1361,7 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
         src="${embedUrl}" 
         frameborder="0"
         allowfullscreen
-        ${useSandbox ? 'sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"' : ''}
+        ${sandboxAttr}
         allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
         class="hero-player-iframe"
         referrerpolicy="no-referrer"
@@ -1285,31 +1374,26 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
   sourceSelector.dataset.isAnime = isAnime;
   sourceSelector.dataset.defaultAudio = defaultAudio;
   
-  const sourceButtonsHtml = availableSources.map((source, index) => {
-    const isCinetaro = source.id === 'cinetaro';
-    const isActive = source.id === defaultSource;
-    const showAudioButtons = isAnime && isCinetaro && isActive;
-    
-    return `
-      <div class="source-btn-wrapper" data-source-id="${source.id}">
-        <button 
-          class="source-btn ${isActive ? 'active' : ''}" 
-          data-source="${source.id}"
-          title="${source.name}"
-        >
-          ${source.name}
-        </button>
-        ${showAudioButtons ? `
-          <div class="source-audio-selector">
-            <button class="audio-btn ${defaultAudio === 'sub' ? 'active' : ''}" data-audio="sub">SUB</button>
-            <button class="audio-btn ${defaultAudio === 'dub' ? 'active' : ''}" data-audio="dub">DUB</button>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }).join('');
+  const sandboxableSources = availableSources.filter(s => !SOURCES_WITHOUT_SANDBOX.includes(s.id));
+  const nonSandboxableSources = availableSources.filter(s => SOURCES_WITHOUT_SANDBOX.includes(s.id));
   
-  sourceSelector.innerHTML = sourceButtonsHtml;
+  const sandboxableHtml = sandboxableSources
+    .map(source => buildSourceWrapperHtml(source, defaultSource, isAnime, defaultAudio, false))
+    .join('');
+  
+  const nonSandboxableHtml = nonSandboxableSources
+    .map(source => buildSourceWrapperHtml(source, defaultSource, isAnime, defaultAudio, true))
+    .join('');
+  
+  const toggleButtonHtml = nonSandboxableSources.length > 0 ? `
+    <div class="source-toggle-wrapper">
+      <button class="source-btn source-toggle-btn" id="show-all-sources-toggle" type="button">
+        Show all sources
+      </button>
+    </div>
+  ` : '';
+  
+  sourceSelector.innerHTML = sandboxableHtml + nonSandboxableHtml + toggleButtonHtml;
   
   hero.appendChild(playerContainer);
   
@@ -1320,8 +1404,64 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
   }
   
   const iframe = playerContainer.querySelector('.hero-player-iframe');
-  if (!useSandbox) {
-    iframe.removeAttribute('sandbox');
+  applySandboxToIframe(iframe, defaultSource);
+  
+  if (SOURCES_WITHOUT_SANDBOX.includes(defaultSource)) {
+    const defaultSourceWrapper = sourceSelector.querySelector(`[data-source-id="${defaultSource}"]`);
+    if (defaultSourceWrapper) {
+      defaultSourceWrapper.style.display = 'flex';
+    }
+  }
+  
+  const toggleButton = sourceSelector.querySelector('#show-all-sources-toggle');
+  if (toggleButton) {
+    let allSourcesVisible = false;
+    const linkElement = toggleButton.querySelector('.toggle-link');
+    
+    if (linkElement) {
+      linkElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+    }
+    
+    toggleButton.addEventListener('click', (e) => {
+      if (e.target.closest('.toggle-link')) {
+        return;
+      }
+      
+      const nonSandboxableWrappers = sourceSelector.querySelectorAll('.source-non-sandboxable');
+      const activeSourceId = sourceSelector.querySelector('.source-btn.active')?.dataset.source;
+      
+      if (!allSourcesVisible) {
+        nonSandboxableWrappers.forEach(wrapper => {
+          wrapper.style.display = 'flex';
+        });
+        toggleButton.innerHTML = 'Hide unsandboxed sources - Use an ad blocker fuckass :3 (<a href="https://chromewebstore.google.com/detail/ddkjiahejlhfcafbddmgiahcphecmpfh?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer" class="toggle-link" onclick="event.stopPropagation()">uBlock</a>)';
+        allSourcesVisible = true;
+        
+        const newLinkElement = toggleButton.querySelector('.toggle-link');
+        if (newLinkElement) {
+          newLinkElement.addEventListener('click', (e) => {
+            e.stopPropagation();
+          });
+        }
+      } else {
+        nonSandboxableWrappers.forEach(wrapper => {
+          if (wrapper.dataset.sourceId !== activeSourceId) {
+            wrapper.style.display = 'none';
+          }
+        });
+        toggleButton.textContent = 'Show all sources';
+        allSourcesVisible = false;
+      }
+      
+      const newLinkElement = toggleButton.querySelector('.toggle-link');
+      if (newLinkElement) {
+        newLinkElement.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      }
+    });
   }
   
   setTimeout(() => {
@@ -1397,36 +1537,20 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
       sourceButtons.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       
-      const sourceWrappers = sourceSelector.querySelectorAll('.source-btn-wrapper');
-      sourceWrappers.forEach(wrapper => {
-        const wrapperSourceId = wrapper.dataset.sourceId;
-        const audioSelector = wrapper.querySelector('.source-audio-selector');
-        const isCinetaro = wrapperSourceId === 'cinetaro';
-        const isActive = wrapperSourceId === sourceId;
-        
-        if (audioSelector) {
-          if (isAnime && isCinetaro && isActive) {
-            audioSelector.style.display = 'flex';
-          } else {
-            audioSelector.style.display = 'none';
-          }
+      if (SOURCES_WITHOUT_SANDBOX.includes(sourceId)) {
+        const sourceWrapper = sourceSelector.querySelector(`[data-source-id="${sourceId}"]`);
+        if (sourceWrapper) {
+          sourceWrapper.style.display = 'flex';
         }
-      });
-      
-      let newUrl = '';
-      if (sourceId === 'cinetaro') {
-        const activeAudio = sourceSelector.querySelector('.audio-btn.active')?.dataset.audio || defaultAudio;
-        newUrl = sourceObj.getUrl(type, details, currentSeason, currentEpisode, activeAudio);
-      } else {
-        newUrl = sourceObj.getUrl(type, details, currentSeason, currentEpisode);
       }
       
+      updateAudioSelectorsVisibility(sourceSelector, sourceId, isAnime);
+      
+      const activeAudio = sourceSelector.querySelector('.audio-btn.active')?.dataset.audio || defaultAudio;
+      const newUrl = getSourceEmbedUrl(sourceObj, type, details, currentSeason, currentEpisode, activeAudio);
+      
       if (newUrl) {
-        if (SOURCES_WITHOUT_SANDBOX.includes(sourceId)) {
-          iframe.removeAttribute('sandbox');
-        } else {
-          iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-presentation');
-        }
+        applySandboxToIframe(iframe, sourceId);
         iframe.src = newUrl;
       }
     });
@@ -1449,9 +1573,9 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
           if (sourceObj) {
             const currentSeason = parseInt(playerContainer.dataset.season) || season;
             const currentEpisode = parseInt(playerContainer.dataset.episode) || episode;
-            const newUrl = sourceObj.getUrl(type, details, currentSeason, currentEpisode, audio);
+            const newUrl = getSourceEmbedUrl(sourceObj, type, details, currentSeason, currentEpisode, audio);
             if (newUrl) {
-              iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-presentation');
+              applySandboxToIframe(iframe, 'cinetaro');
               iframe.src = newUrl;
             }
           }
