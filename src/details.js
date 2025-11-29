@@ -6,7 +6,7 @@ import { MAX_PROVIDER_ICONS, PROVIDER_CACHE_TTL_MS, PROVIDER_FETCH_TIMEOUT_MS, P
 import { showAddToListMenu, updateAddButton } from "./ui.js";
 import * as listStore from "./list-store.js";
 
-const SOURCES_WITHOUT_SANDBOX = ['111movies', '2embed', 'filmku', 'godrive', 'moviesapi', 'primesrc', 'smashy', 'vidora', 'videasy', 'vidfast', 'vidlink', 'vidsrc', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidup'];
+const SOURCES_WITHOUT_SANDBOX = ['111movies', '2embed', 'filmku', 'godrive', 'moviesapi', 'primesrc', 'smashy', 'vidora', 'videasy', 'vidfast', 'vidlink', 'vidsrc', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidup', 'vidsrcwtf1', 'vidsrcwtf2', 'vidsrcwtf3', 'vidsrcwtf4'];
 
 const SOURCES = {
   vidsrc: {
@@ -70,14 +70,46 @@ const SOURCES = {
       return null;
     }
   },
-  'vidsrcwtf': {
-    name: 'VidSrc WTF', // TODO: Fix fullscreen
+  'vidsrcwtf1': {
+    name: 'VidSrc WTF 1',
     getUrl: (type, details, season = 1, episode = 1) => {
       if (type === 'movie') {
         return `https://vidsrc.wtf/api/1/movie/?id=${details.id}&color=e01621`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://vidsrc.wtf/api/1/tv/?id=${tvId}&s=${season}&e=${episode}&color=e01621`;
+        return `https://vidsrc.wtf/api/1/tv/?id=${details.id}&s=${season}&e=${episode}&color=e01621`;
+      }
+      return null;
+    }
+  },
+  'vidsrcwtf2': {
+    name: 'VidSrc WTF 2',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsrc.wtf/api/2/movie/?id=${details.id}&color=e01621`;
+      } else if (type === 'tv') {
+        return `https://vidsrc.wtf/api/2/tv/?id=${details.id}&s=${season}&e=${episode}&color=e01621`;
+      }
+      return null;
+    }
+  },
+  'vidsrcwtf3': {
+    name: 'VidSrc WTF 3',
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsrc.wtf/api/3/movie/?id=${details.id}&color=e01621`;
+      } else if (type === 'tv') {
+        return `https://vidsrc.wtf/api/3/tv/?id=${details.id}&s=${season}&e=${episode}&color=e01621`;
+      }
+      return null;
+    }
+  },
+  'vidsrcwtf4': {
+    name: 'VidSrc WTF 4', // TODO: Fix fullscreen
+    getUrl: (type, details, season = 1, episode = 1) => {
+      if (type === 'movie') {
+        return `https://vidsrc.wtf/api/4/movie/?id=${details.id}&color=e01621`;
+      } else if (type === 'tv') {
+        return `https://vidsrc.wtf/api/4/tv/?id=${details.id}&s=${season}&e=${episode}&color=e01621`;
       }
       return null;
     }
@@ -99,8 +131,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://fmovies4u.com/embed/tmdb-movie-${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://fmovies4u.com/embed/tmdb-tv-${tvId}/${season}/${episode}`;
+        return `https://fmovies4u.com/embed/tmdb-tv-${details.id}/${season}/${episode}`;
       }
       return null;
     }
@@ -111,8 +142,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://godriveplayer.com/player.php?tmdb=${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://godriveplayer.com/player.php?type=series&tmdb=${tvId}&season=${season}&episode=${episode}`;
+        return `https://godriveplayer.com/player.php?type=series&tmdb=${details.id}&season=${season}&episode=${episode}`;
       }
       return null;
     }
@@ -123,8 +153,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://moviesapi.club/movie/${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://moviesapi.club/tv/${tvId}-${season}-${episode}`;
+        return `https://moviesapi.club/tv/${details.id}-${season}-${episode}`;
       }
       return null;
     }
@@ -135,8 +164,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://primesrc.me/embed/movie?tmdb=${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://primesrc.me/embed/tv?tmdb=${tvId}&season=${season}&episode=${episode}`;
+        return `https://primesrc.me/embed/tv?tmdb=${details.id}&season=${season}&episode=${episode}`;
       }
       return null;
     }
@@ -147,8 +175,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://rivestream.org/embed?type=movie&id=${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://rivestream.org/embed?type=tv&id=${tvId}&season=${season}&episode=${episode}`;
+        return `https://rivestream.org/embed?type=tv&id=${details.id}&season=${season}&episode=${episode}`;
       }
       return null;
     }
@@ -159,8 +186,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://player.smashy.stream/movie/${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://player.smashy.stream/tv/${tvId}?s=${season}&e=${episode}`;
+        return `https://player.smashy.stream/tv/${details.id}?s=${season}&e=${episode}`;
       }
       return null;
     }
@@ -171,8 +197,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://spencerdevs.xyz/movie/${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://spencerdevs.xyz/tv/${tvId}/${season}/${episode}`;
+        return `https://spencerdevs.xyz/tv/${details.id}/${season}/${episode}`;
       }
       return null;
     }
@@ -214,10 +239,12 @@ const SOURCES = {
     name: 'Vidify',
     getUrl: (type, details, season = 1, episode = 1) => {
       if (type === 'movie') {
-        return `https://player.vidify.top/embed/movie/${details.id}`;
+        const url = `https://player.vidify.top/embed/movie/${details.id}?autoplay=false&poster=true&chromecast=true&servericon=true&setting=true&pip=true&logourl=https%3A%2F%2Fi.ibb.co%2F67wTJd9R%2Fpngimg-com-netflix-PNG11.png&font=Roboto&fontcolor=6f63ff&fontsize=20&opacity=0.5&primarycolor=3b82f6&secondarycolor=1f2937&iconcolor=ffffff`;
+        console.log('[Vidify Debug] Movie URL:', url);
+        return url;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://player.vidify.top/embed/tv/${tvId}/${season}/${episode}`;
+        const url = `https://player.vidify.top/embed/tv/${details.id}/${season}/${episode}?autoplay=false&poster=true&chromecast=true&servericon=true&setting=true&pip=true&logourl=https%3A%2F%2Fi.ibb.co%2F67wTJd9R%2Fpngimg-com-netflix-PNG11.png&font=Roboto&fontcolor=6f63ff&fontsize=20&opacity=0.5&primarycolor=3b82f6&secondarycolor=1f2937&iconcolor=ffffff`;
+        return url;
       }
       return null;
     }
@@ -228,8 +255,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://player.vidzee.wtf/embed/movie/${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://player.vidzee.wtf/embed/tv/${tvId}/${season}/${episode}`;
+        return `https://player.vidzee.wtf/embed/tv/${details.id}/${season}/${episode}`;
       }
       return null;
     }
@@ -240,8 +266,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://vidlink.pro/movie/${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://vidlink.pro/tv/${tvId}/${season}/${episode}`;
+        return `https://vidlink.pro/tv/${details.id}/${season}/${episode}`;
       }
       return null;
     }
@@ -252,8 +277,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://vidnest.fun/movie/${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://vidnest.fun/tv/${tvId}/${season}/${episode}`;
+        return `https://vidnest.fun/tv/${details.id}/${season}/${episode}`;
       }
       return null;
     }
@@ -264,8 +288,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://vidsrc.cx/embed/movie/${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://vidsrc.cx/embed/tv/${tvId}/${season}/${episode}`;
+        return `https://vidsrc.cx/embed/tv/${details.id}/${season}/${episode}`;
       }
       return null;
     }
@@ -276,8 +299,7 @@ const SOURCES = {
       if (type === 'movie') {
         return `https://vidsrcme.ru/embed/movie?tmdb=${details.id}`;
       } else if (type === 'tv') {
-        const tvId = details.external_ids?.tvdb_id || details.id;
-        return `https://vidsrc-embed.ru/embed/tv?tmdb=${tvId}&season=${season}&episode=${episode}`;
+        return `https://vidsrc-embed.ru/embed/tv?tmdb=${details.id}&season=${season}&episode=${episode}`;
       }
       return null;
     }
@@ -1127,7 +1149,7 @@ export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
         availableSources.push({ id: '2embed', ...SOURCES['2embed'] });
       }
       
-      const otherSources = ['autoembed', 'bidsrc', 'vidsrcwtf', 'filmku', 'fmovies4u', 'godrive', 'moviesapi', 'primesrc', 'rivestream', 'smashy', 'spencerdevs', 'vidora', 'videasy', 'vidfast', 'vidify', 'vidzee', 'vidlink', 'vidnest', 'vidsrccx', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidsync', 'vidup'];
+      const otherSources = ['autoembed', 'bidsrc', 'vidsrcwtf1', 'vidsrcwtf2', 'vidsrcwtf3', 'vidsrcwtf4', 'filmku', 'fmovies4u', 'godrive', 'moviesapi', 'primesrc', 'rivestream', 'smashy', 'spencerdevs', 'vidora', 'videasy', 'vidfast', 'vidify', 'vidzee', 'vidlink', 'vidnest', 'vidsrccx', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidsync', 'vidup'];
       otherSources.forEach(sourceId => {
         const sourceUrl = SOURCES[sourceId]?.getUrl(type, details, season, episode);
         if (sourceUrl) {
@@ -1150,7 +1172,7 @@ export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
         availableSources.push({ id: '2embed', ...SOURCES['2embed'] });
       }
       
-      const otherSources = ['autoembed', 'bidsrc', 'vidsrcwtf', 'filmku', 'fmovies4u', 'godrive', 'moviesapi', 'primesrc', 'rivestream', 'smashy', 'spencerdevs', 'vidora', 'videasy', 'vidfast', 'vidify', 'vidzee', 'vidlink', 'vidnest', 'vidsrccx', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidsync', 'vidup'];
+      const otherSources = ['autoembed', 'bidsrc', 'vidsrcwtf1', 'vidsrcwtf2', 'vidsrcwtf3', 'vidsrcwtf4', 'filmku', 'fmovies4u', 'godrive', 'moviesapi', 'primesrc', 'rivestream', 'smashy', 'spencerdevs', 'vidora', 'videasy', 'vidfast', 'vidify', 'vidzee', 'vidlink', 'vidnest', 'vidsrccx', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidsync', 'vidup'];
       otherSources.forEach(sourceId => {
         const sourceUrl = SOURCES[sourceId]?.getUrl(type, details, season, episode);
         if (sourceUrl) {
@@ -1261,6 +1283,15 @@ function applySandboxToIframe(iframe, sourceId) {
 }
 
 /**
+ * Checks if a source is a VidSrc WTF source
+ * @param {string} sourceId - Source identifier
+ * @returns {boolean} True if source is VidSrc WTF
+ */
+function isVidSrcWTFSource(sourceId) {
+  return sourceId && (sourceId === 'vidsrcwtf1' || sourceId === 'vidsrcwtf2' || sourceId === 'vidsrcwtf3' || sourceId === 'vidsrcwtf4');
+}
+
+/**
  * Gets embed URL for a source
  * @param {Object} sourceObj - Source object
  * @param {string} type - Media type ('movie' or 'tv')
@@ -1357,6 +1388,15 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
     ? 'sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"' 
     : '';
   
+  const isVidSrcWTF = isVidSrcWTFSource(defaultSource);
+  const fullscreenButtonHtml = `
+    <button class="vidsrcwtf-fullscreen-btn" type="button" aria-label="Fullscreen" title="Fullscreen" style="display: ${isVidSrcWTF ? 'flex' : 'none'};">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+      </svg>
+    </button>
+  `;
+  
   playerContainer.innerHTML = `
     <div class="hero-player-wrapper">
       <iframe 
@@ -1368,6 +1408,7 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
         class="hero-player-iframe"
         referrerpolicy="no-referrer"
       ></iframe>
+      ${fullscreenButtonHtml}
     </div>
   `;
   
@@ -1407,6 +1448,25 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
   
   const iframe = playerContainer.querySelector('.hero-player-iframe');
   applySandboxToIframe(iframe, defaultSource);
+  
+  // Add fullscreen button handler for VidSrc WTF sources
+  const fullscreenBtn = playerContainer.querySelector('.vidsrcwtf-fullscreen-btn');
+  if (fullscreenBtn) {
+    console.log('[VidSrc WTF] Fullscreen button found, isVidSrcWTF:', isVidSrcWTF);
+    fullscreenBtn.addEventListener('click', () => {
+      if (iframe.requestFullscreen) {
+        iframe.requestFullscreen();
+      } else if (iframe.webkitRequestFullscreen) {
+        iframe.webkitRequestFullscreen();
+      } else if (iframe.mozRequestFullScreen) {
+        iframe.mozRequestFullScreen();
+      } else if (iframe.msRequestFullscreen) {
+        iframe.msRequestFullscreen();
+      }
+    });
+  } else {
+    console.warn('[VidSrc WTF] Fullscreen button not found!');
+  }
   
   if (SOURCES_WITHOUT_SANDBOX.includes(defaultSource)) {
     const defaultSourceWrapper = sourceSelector.querySelector(`[data-source-id="${defaultSource}"]`);
@@ -1554,6 +1614,16 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
       if (newUrl) {
         applySandboxToIframe(iframe, sourceId);
         iframe.src = newUrl;
+        
+        // Show/hide fullscreen button based on source
+        const fullscreenBtn = playerContainer.querySelector('.vidsrcwtf-fullscreen-btn');
+        if (fullscreenBtn) {
+          if (isVidSrcWTFSource(sourceId)) {
+            fullscreenBtn.style.display = 'flex';
+          } else {
+            fullscreenBtn.style.display = 'none';
+          }
+        }
       }
     });
   });

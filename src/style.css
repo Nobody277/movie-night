@@ -1679,6 +1679,7 @@ canvas.p5Canvas {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 
 .hero-player-iframe {
@@ -1686,6 +1687,37 @@ canvas.p5Canvas {
   height: 100%;
   border: none;
   display: block;
+}
+
+.vidsrcwtf-fullscreen-btn {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(21,25,35,0.95);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  z-index: 20;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 0;
+}
+
+.vidsrcwtf-fullscreen-btn:hover {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.35);
+}
+
+.vidsrcwtf-fullscreen-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .hero-source-selector {
