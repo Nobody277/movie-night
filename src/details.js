@@ -1104,12 +1104,13 @@ export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
     const isAnimeTitle = await checkIsAnime(type, id, details);
     
     const availableSources = [];
-    let defaultSource = null;
     let defaultAudio = 'sub';
     
     if (isAnimeTitle) {
-      availableSources.push({ id: 'cinetaro', ...SOURCES.cinetaro });
-      defaultSource = 'cinetaro';
+      const cinetaroUrl = SOURCES.cinetaro.getUrl(type, details, season, episode, defaultAudio);
+      if (cinetaroUrl) {
+        availableSources.push({ id: 'cinetaro', ...SOURCES.cinetaro });
+      }
       
       const vidsrcUrl = SOURCES.vidsrc.getUrl(type, details, season, episode);
       if (vidsrcUrl) {
@@ -1137,7 +1138,6 @@ export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
       const vidsrcUrl = SOURCES.vidsrc.getUrl(type, details, season, episode);
       if (vidsrcUrl) {
         availableSources.push({ id: 'vidsrc', ...SOURCES.vidsrc });
-        defaultSource = 'vidsrc';
       }
       
       const movies111Url = SOURCES['111movies'].getUrl(type, details, season, episode);
@@ -1163,6 +1163,10 @@ export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
       console.error('No available sources');
       return;
     }
+    
+    // Sort sources alphabetically by name and set first as default
+    availableSources.sort((a, b) => a.name.localeCompare(b.name));
+    const defaultSource = availableSources[0]?.id || null;
     
     hero.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
