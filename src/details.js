@@ -6,7 +6,39 @@ import { MAX_PROVIDER_ICONS, PROVIDER_CACHE_TTL_MS, PROVIDER_FETCH_TIMEOUT_MS, P
 import { showAddToListMenu, updateAddButton } from "./ui.js";
 import * as listStore from "./list-store.js";
 
-const SOURCES_WITHOUT_SANDBOX = ['111movies', '2embed', 'filmku', 'godrive', 'moviesapi', 'primesrc', 'smashy', 'vidora', 'videasy', 'vidfast', 'vidlink', 'vidsrc', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidup', 'vidsrcwtf1', 'vidsrcwtf2', 'vidsrcwtf3', 'vidsrcwtf4'];
+// Source priority list (best to worst)
+// Cinetaro is always first for anime, then follows this priority for all content
+const SOURCE_PRIORITY = [
+  'vidsrc',           // vidsrc.cc
+  '111movies',        // 111Movies
+  'vidup',            // VidUp
+  'vidfast',          // VidFast
+  'vidrock',          // VidRock
+  'vidlink',          // VidLink
+  'vidsrcwtf3',       // VidSrc WTF 3
+  'vidzee',           // VidZee
+  'videasy',          // Videasy
+  'vidnest',          // VidNest
+  'moviesapi',        // MoviesAPI
+  'vidsrcto',         // VidSrc TO
+  'vixsrc',           // VixSrc
+  'vidsrcme',         // VidSrc ME
+  '2embed',           // 2Embed
+  'vidora',           // Vidora
+  'rivestream',       // RiveStream
+  'filmku',           // Filmku
+  'godrive',          // GoDrive
+  'autoembed',        // AutoEmbed
+  'bidsrc',           // BidSrc
+  'smashy',           // Smashy
+  'vidsrcwtf1',       // VidSrc WTF 1
+  'vidsrcwtf2',       // VidSrc WTF 2
+  'vidsrcwtf4',       // VidSrc WTF 4
+  'spencerdevs',      // SpencerDevs
+  'vidsrccx',         // VidSrc CX
+  'vidsync',          // VidSync
+  'primesrc'          // PrimeSrc
+];
 
 const SOURCES = {
   vidsrc: {
@@ -1133,60 +1165,27 @@ export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
       if (cinetaroUrl) {
         availableSources.push({ id: 'cinetaro', ...SOURCES.cinetaro });
       }
-      
-      const vidsrcUrl = SOURCES.vidsrc.getUrl(type, details, season, episode);
-      if (vidsrcUrl) {
-        availableSources.push({ id: 'vidsrc', ...SOURCES.vidsrc });
-      }
-      
-      const movies111Url = SOURCES['111movies'].getUrl(type, details, season, episode);
-      if (movies111Url) {
-        availableSources.push({ id: '111movies', ...SOURCES['111movies'] });
-      }
-      
-      const embed2Url = SOURCES['2embed'].getUrl(type, details, season, episode);
-      if (embed2Url) {
-        availableSources.push({ id: '2embed', ...SOURCES['2embed'] });
-      }
-      
-      const otherSources = ['autoembed', 'bidsrc', 'vidsrcwtf1', 'vidsrcwtf2', 'vidsrcwtf3', 'vidsrcwtf4', 'filmku', 'fmovies4u', 'godrive', 'moviesapi', 'primesrc', 'rivestream', 'smashy', 'spencerdevs', 'vidora', 'videasy', 'vidfast', 'vidify', 'vidzee', 'vidlink', 'vidnest', 'vidsrccx', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidsync', 'vidup'];
-      otherSources.forEach(sourceId => {
-        const sourceUrl = SOURCES[sourceId]?.getUrl(type, details, season, episode);
-        if (sourceUrl) {
-          availableSources.push({ id: sourceId, ...SOURCES[sourceId] });
-        }
-      });
-    } else {
-      const vidsrcUrl = SOURCES.vidsrc.getUrl(type, details, season, episode);
-      if (vidsrcUrl) {
-        availableSources.push({ id: 'vidsrc', ...SOURCES.vidsrc });
-      }
-      
-      const movies111Url = SOURCES['111movies'].getUrl(type, details, season, episode);
-      if (movies111Url) {
-        availableSources.push({ id: '111movies', ...SOURCES['111movies'] });
-      }
-      
-      const embed2Url = SOURCES['2embed'].getUrl(type, details, season, episode);
-      if (embed2Url) {
-        availableSources.push({ id: '2embed', ...SOURCES['2embed'] });
-      }
-      
-      const otherSources = ['autoembed', 'bidsrc', 'vidsrcwtf1', 'vidsrcwtf2', 'vidsrcwtf3', 'vidsrcwtf4', 'filmku', 'fmovies4u', 'godrive', 'moviesapi', 'primesrc', 'rivestream', 'smashy', 'spencerdevs', 'vidora', 'videasy', 'vidfast', 'vidify', 'vidzee', 'vidlink', 'vidnest', 'vidsrccx', 'vidsrcme', 'vidsrcto', 'vidrock', 'vixsrc', 'vidsync', 'vidup'];
-      otherSources.forEach(sourceId => {
-        const sourceUrl = SOURCES[sourceId]?.getUrl(type, details, season, episode);
-        if (sourceUrl) {
-          availableSources.push({ id: sourceId, ...SOURCES[sourceId] });
-        }
-      });
     }
+    
+    const allSourceIds = [...SOURCE_PRIORITY, 'fmovies4u', 'vidify'];
+    allSourceIds.forEach(sourceId => {
+      const source = SOURCES[sourceId];
+      if (source) {
+        const sourceUrl = source.getUrl(type, details, season, episode);
+        if (sourceUrl) {
+          availableSources.push({ id: sourceId, ...source });
+        }
+      }
+    });
     
     if (availableSources.length === 0) {
       console.error('No available sources');
       return;
     }
-    const sandboxedSource = availableSources.find(s => !SOURCES_WITHOUT_SANDBOX.includes(s.id));
-    const defaultSource = sandboxedSource?.id || availableSources[0]?.id || null;
+    
+    // Sort sources by priority and select the first one
+    const sortedSources = sortSourcesByPriority(availableSources);
+    const defaultSource = sortedSources[0]?.id || null;
     
     hero.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
@@ -1261,25 +1260,44 @@ function updateAudioSelectorsVisibility(sourceSelector, activeSourceId, isAnime)
 }
 
 /**
- * Checks if a source can be sandboxed
- * @param {string} sourceId - Source identifier
- * @returns {boolean} True if source can be sandboxed
+ * Detects if the user is on a mobile device
+ * @returns {boolean} True if on mobile device
  */
-function canSandboxSource(sourceId) {
-  return !SOURCES_WITHOUT_SANDBOX.includes(sourceId);
+function isMobileDevice() {
+  const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isSmallScreen = window.innerWidth <= 768;
+  const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+  
+  return (hasTouchScreen && isSmallScreen) || isMobileUA;
 }
 
 /**
- * Applies sandbox attribute to iframe based on source
- * @param {HTMLIFrameElement} iframe - Target iframe element
+ * Gets the priority index for a source (lower = higher priority)
  * @param {string} sourceId - Source identifier
+ * @returns {number} Priority index, or Infinity if not found
  */
-function applySandboxToIframe(iframe, sourceId) {
-  if (canSandboxSource(sourceId)) {
-    iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-presentation');
-  } else {
-    iframe.removeAttribute('sandbox');
-  }
+function getSourcePriority(sourceId) {
+  const index = SOURCE_PRIORITY.indexOf(sourceId);
+  return index === -1 ? Infinity : index;
+}
+
+/**
+ * Sorts sources by priority (best to worst)
+ * @param {Array} sources - Array of source objects
+ * @returns {Array} Sorted sources array
+ */
+function sortSourcesByPriority(sources) {
+  return [...sources].sort((a, b) => {
+    // Cinetaro always comes first for anime
+    if (a.id === 'cinetaro') return -1;
+    if (b.id === 'cinetaro') return 1;
+    
+    const priorityA = getSourcePriority(a.id);
+    const priorityB = getSourcePriority(b.id);
+    
+    return priorityA - priorityB;
+  });
 }
 
 /**
@@ -1314,18 +1332,15 @@ function getSourceEmbedUrl(sourceObj, type, details, season, episode, defaultAud
  * @param {string} defaultSource - ID of the default source
  * @param {boolean} isAnime - Whether this is an anime title
  * @param {string} defaultAudio - Default audio track ('sub' or 'dub')
- * @param {boolean} isHidden - Whether to hide this source initially
  * @returns {string} HTML string for the source wrapper
  */
-function buildSourceWrapperHtml(source, defaultSource, isAnime, defaultAudio, isHidden = false) {
+function buildSourceWrapperHtml(source, defaultSource, isAnime, defaultAudio) {
   const isCinetaro = source.id === 'cinetaro';
   const isActive = source.id === defaultSource;
   const showAudioButtons = isAnime && isCinetaro && isActive;
-  const hiddenStyle = isHidden ? 'style="display: none;"' : '';
-  const hiddenClass = isHidden ? ' source-non-sandboxable' : '';
   
   return `
-    <div class="source-btn-wrapper${hiddenClass}" data-source-id="${source.id}" ${hiddenStyle}>
+    <div class="source-btn-wrapper" data-source-id="${source.id}">
       <button 
         class="source-btn ${isActive ? 'active' : ''}" 
         data-source="${source.id}"
@@ -1384,10 +1399,6 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
   playerContainer.dataset.season = season;
   playerContainer.dataset.episode = episode;
   
-  const sandboxAttr = canSandboxSource(defaultSource) 
-    ? 'sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"' 
-    : '';
-  
   const isVidSrcWTF = isVidSrcWTFSource(defaultSource);
   const fullscreenButtonHtml = `
     <button class="vidsrcwtf-fullscreen-btn" type="button" aria-label="Fullscreen" title="Fullscreen" style="display: ${isVidSrcWTF ? 'flex' : 'none'};">
@@ -1403,7 +1414,6 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
         src="${embedUrl}" 
         frameborder="0"
         allowfullscreen
-        ${sandboxAttr}
         allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
         class="hero-player-iframe"
         referrerpolicy="no-referrer"
@@ -1417,26 +1427,28 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
   sourceSelector.dataset.isAnime = isAnime;
   sourceSelector.dataset.defaultAudio = defaultAudio;
   
-  const sandboxableSources = availableSources.filter(s => !SOURCES_WITHOUT_SANDBOX.includes(s.id));
-  const nonSandboxableSources = availableSources.filter(s => SOURCES_WITHOUT_SANDBOX.includes(s.id));
+  const sortedSources = sortSourcesByPriority(availableSources);
   
-  const sandboxableHtml = sandboxableSources
-    .map(source => buildSourceWrapperHtml(source, defaultSource, isAnime, defaultAudio, false))
+  const sourcesHtml = sortedSources
+    .map(source => buildSourceWrapperHtml(source, defaultSource, isAnime, defaultAudio))
     .join('');
   
-  const nonSandboxableHtml = nonSandboxableSources
-    .map(source => buildSourceWrapperHtml(source, defaultSource, isAnime, defaultAudio, true))
-    .join('');
+  const isMobile = isMobileDevice();
+  const adBlockerBannerHtml = isMobile
+    ? `
+      <div class="source-adblocker-banner">
+        <span>Please use an ad blocker for the love of god please!</span>
+        <a href="https://brave.com/download/" target="_blank" rel="noopener noreferrer">Get Brave Browser</a>
+      </div>
+    `
+    : `
+      <div class="source-adblocker-banner">
+        <span>Please use an ad blocker for the love of god please!</span>
+        <a href="https://chromewebstore.google.com/detail/ddkjiahejlhfcafbddmgiahcphecmpfh?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer">Get uBlock Origin</a>
+      </div>
+    `;
   
-  const toggleButtonHtml = nonSandboxableSources.length > 0 ? `
-    <div class="source-toggle-wrapper">
-      <button class="source-btn source-toggle-btn" id="show-all-sources-toggle" type="button">
-        Show all sources
-      </button>
-    </div>
-  ` : '';
-  
-  sourceSelector.innerHTML = sandboxableHtml + nonSandboxableHtml + toggleButtonHtml;
+  sourceSelector.innerHTML = sourcesHtml + adBlockerBannerHtml;
   
   hero.appendChild(playerContainer);
   
@@ -1447,7 +1459,6 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
   }
   
   const iframe = playerContainer.querySelector('.hero-player-iframe');
-  applySandboxToIframe(iframe, defaultSource);
   
   // Add fullscreen button handler for VidSrc WTF sources
   const fullscreenBtn = playerContainer.querySelector('.vidsrcwtf-fullscreen-btn');
@@ -1468,123 +1479,13 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
     console.warn('[VidSrc WTF] Fullscreen button not found!');
   }
   
-  if (SOURCES_WITHOUT_SANDBOX.includes(defaultSource)) {
-    const defaultSourceWrapper = sourceSelector.querySelector(`[data-source-id="${defaultSource}"]`);
-    if (defaultSourceWrapper) {
-      defaultSourceWrapper.style.display = 'flex';
-    }
-  }
-  
-  const toggleButton = sourceSelector.querySelector('#show-all-sources-toggle');
-  if (toggleButton) {
-    let allSourcesVisible = false;
-    const linkElement = toggleButton.querySelector('.toggle-link');
-    
-    if (linkElement) {
-      linkElement.addEventListener('click', (e) => {
-        e.stopPropagation();
-      });
-    }
-    
-    toggleButton.addEventListener('click', (e) => {
-      if (e.target.closest('.toggle-link')) {
-        return;
-      }
-      
-      const nonSandboxableWrappers = sourceSelector.querySelectorAll('.source-non-sandboxable');
-      const activeSourceId = sourceSelector.querySelector('.source-btn.active')?.dataset.source;
-      
-      if (!allSourcesVisible) {
-        nonSandboxableWrappers.forEach(wrapper => {
-          wrapper.style.display = 'flex';
-        });
-        toggleButton.innerHTML = 'Hide unsandboxed sources - Use an ad blocker fuckass :3 (<a href="https://chromewebstore.google.com/detail/ddkjiahejlhfcafbddmgiahcphecmpfh?utm_source=item-share-cb" target="_blank" rel="noopener noreferrer" class="toggle-link" onclick="event.stopPropagation()">uBlock</a>)';
-        allSourcesVisible = true;
-        
-        const newLinkElement = toggleButton.querySelector('.toggle-link');
-        if (newLinkElement) {
-          newLinkElement.addEventListener('click', (e) => {
-            e.stopPropagation();
-          });
-        }
-      } else {
-        nonSandboxableWrappers.forEach(wrapper => {
-          if (wrapper.dataset.sourceId !== activeSourceId) {
-            wrapper.style.display = 'none';
-          }
-        });
-        toggleButton.textContent = 'Show all sources';
-        allSourcesVisible = false;
-      }
-      
-      const newLinkElement = toggleButton.querySelector('.toggle-link');
-      if (newLinkElement) {
-        newLinkElement.addEventListener('click', (e) => {
-          e.stopPropagation();
-        });
-      }
-    });
-  }
   
   setTimeout(() => {
     playerContainer.classList.add('fade-in');
     sourceSelector.classList.add('fade-in');
   }, 50);
-  let iframeInteractionTime = 0;
-  let navigationBlocked = false;
   
-  iframe.addEventListener('mouseenter', () => {
-    iframeInteractionTime = Date.now();
-    navigationBlocked = true;
-  });
-  
-  iframe.addEventListener('mouseleave', () => {
-    setTimeout(() => {
-      navigationBlocked = false;
-    }, 1000);
-  });
-  
-  iframe.addEventListener('load', () => {
-    try {
-      if (iframe.contentWindow) {
-        try {
-          const iframeWindow = iframe.contentWindow;
-          const originalOpen = iframeWindow.open;
-          iframeWindow.open = function(...args) {
-            const url = args[0];
-            if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
-              return originalOpen.apply(this, args);
-            }
-            return null;
-          };
-        } catch (e) {
-        }
-      }
-    } catch (e) {
-    }
-  });
-  
-  let lastBlurTime = 0;
-  const blurHandler = () => {
-    const now = Date.now();
-    const timeSinceInteraction = now - iframeInteractionTime;
-    
-    if (timeSinceInteraction < 2000 && now - lastBlurTime < 500) {
-      setTimeout(() => {
-        if (!document.hasFocus()) {
-          window.focus();
-        }
-      }, 10);
-    }
-    lastBlurTime = now;
-  };
-  
-  window.addEventListener('blur', blurHandler, { capture: true });
-  
-  playerContainer._cleanup = () => {
-    window.removeEventListener('blur', blurHandler, { capture: true });
-    navigationBlocked = false;
-  };
+  playerContainer._cleanup = () => { };
   
   const sourceButtons = sourceSelector.querySelectorAll('.source-btn');
   sourceButtons.forEach(btn => {
@@ -1599,20 +1500,12 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
       sourceButtons.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       
-      if (SOURCES_WITHOUT_SANDBOX.includes(sourceId)) {
-        const sourceWrapper = sourceSelector.querySelector(`[data-source-id="${sourceId}"]`);
-        if (sourceWrapper) {
-          sourceWrapper.style.display = 'flex';
-        }
-      }
-      
       updateAudioSelectorsVisibility(sourceSelector, sourceId, isAnime);
       
       const activeAudio = sourceSelector.querySelector('.audio-btn.active')?.dataset.audio || defaultAudio;
       const newUrl = getSourceEmbedUrl(sourceObj, type, details, currentSeason, currentEpisode, activeAudio);
       
       if (newUrl) {
-        applySandboxToIframe(iframe, sourceId);
         iframe.src = newUrl;
         
         // Show/hide fullscreen button based on source
@@ -1647,7 +1540,6 @@ function showPlayerInHero(hero, type, details, availableSources, defaultSource, 
             const currentEpisode = parseInt(playerContainer.dataset.episode) || episode;
             const newUrl = getSourceEmbedUrl(sourceObj, type, details, currentSeason, currentEpisode, audio);
             if (newUrl) {
-              applySandboxToIframe(iframe, 'cinetaro');
               iframe.src = newUrl;
             }
           }
@@ -1714,7 +1606,6 @@ function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, e
         src="${embedUrl}" 
         frameborder="0"
         allowfullscreen
-        sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"
         allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
         class="player-iframe"
         referrerpolicy="no-referrer"

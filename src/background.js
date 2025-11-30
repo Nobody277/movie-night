@@ -1,7 +1,8 @@
 let instance = null;
 
 /**
- * Initializes the p5.js background animation with a 2D wireframe grid and wave effect
+ * Initializes the p5.js background animation with a 2D wireframe grid and wave effect.
+ * 
  * @returns {void}
  */
 export function startBackground() {
@@ -13,19 +14,75 @@ export function startBackground() {
     let gridSpacing = 48;
     let gridColorBase = { r: 255, g: 255, b: 255 };
     let targetFps = 60;
+    let headerHeight = 0;
     const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    function recomputeGrid() {
-      const base = Math.min(p.width, p.height);
-      gridSpacing = Math.max(36, Math.min(80, Math.floor(base / 20)));
-
-      xLines = [];
-      for (let x = 0; x <= p.width; x += gridSpacing) xLines.push(Math.floor(x));
-
-      yLines = [];
-      for (let y = 0; y <= p.height; y += gridSpacing) yLines.push(Math.floor(y));
+    /**
+     * Gets the current height of the site header element.
+     * 
+     * @returns {number} The header height in pixels, or 0 if not found.
+     */
+    function getHeaderHeight() {
+      try {
+        const header = document.querySelector('.site-header');
+        if (header) {
+          return header.offsetHeight || 0;
+        }
+      } catch {}
+      return 0;
     }
 
+    /**
+     * Recomputes the grid layout to create perfect squares that align to screen edges.
+     * The grid starts below the header and extends to the bottom of the screen.
+     * 
+     * @returns {void}
+     */
+    function recomputeGrid() {
+      const width = p.width;
+      const fullHeight = p.height;
+      
+      headerHeight = getHeaderHeight();
+      const visibleHeight = fullHeight - headerHeight;
+      
+      const minDimension = Math.min(width, visibleHeight);
+      const targetCellCount = Math.max(15, Math.min(25, Math.floor(minDimension / 40)));
+      
+      const baseSpacing = Math.max(36, Math.min(80, Math.floor(minDimension / targetCellCount)));
+      
+      let cellCount = Math.floor(minDimension / baseSpacing);
+      cellCount = Math.max(1, cellCount);
+      
+      gridSpacing = minDimension / cellCount;
+      
+      const xCellCount = Math.round(width / gridSpacing);
+      const yCellCount = Math.round(visibleHeight / gridSpacing);
+      
+      const xExactSpacing = width / xCellCount;
+      const yExactSpacing = visibleHeight / yCellCount;
+
+      xLines = [];
+      for (let i = 0; i <= xCellCount; i++) {
+        const x = i * xExactSpacing;
+        xLines.push(Math.round(x));
+      }
+      xLines[0] = 0;
+      xLines[xLines.length - 1] = width;
+
+      yLines = [];
+      for (let i = 0; i <= yCellCount; i++) {
+        const y = headerHeight + (i * yExactSpacing);
+        yLines.push(Math.round(y));
+      }
+      yLines[0] = headerHeight;
+      yLines[yLines.length - 1] = fullHeight;
+    }
+
+    /**
+     * p5.js setup function - initializes the canvas and grid.
+     * 
+     * @returns {void}
+     */
     p.setup = function() {
       p.pixelDensity(1);
       p.createCanvas(p.windowWidth, p.windowHeight);
@@ -49,6 +106,11 @@ export function startBackground() {
       } catch {}
     };
 
+    /**
+     * p5.js draw function - renders the animated grid each frame.
+     * 
+     * @returns {void}
+     */
     p.draw = function() {
       p.background(0);
       if (reduceMotion) {
@@ -58,13 +120,41 @@ export function startBackground() {
       drawGrid();
     };
 
+    /**
+     * p5.js windowResized function - handles window resize events.
+     * 
+     * @returns {void}
+     */
     p.windowResized = function() {
       p.pixelDensity(1);
       p.resizeCanvas(p.windowWidth, p.windowHeight, true);
       recomputeGrid();
       p.background(0);
     };
+    
+    const headerObserver = new MutationObserver(() => {
+      recomputeGrid();
+    });
+    
+    setTimeout(() => {
+      try {
+        const header = document.querySelector('.site-header');
+        if (header) {
+          headerObserver.observe(header, { 
+            attributes: true, 
+            attributeFilter: ['style', 'class'],
+            childList: true,
+            subtree: true
+          });
+        }
+      } catch {}
+    }, 100);
 
+    /**
+     * Draws the animated grid with wave effects on horizontal and vertical lines.
+     * 
+     * @returns {void}
+     */
     function drawGrid() {
       const time = p.frameCount * 0.02;
 
@@ -97,6 +187,12 @@ export function startBackground() {
       }
     }
 
+    /**
+     * Draws a static grid without animation effects.
+     * Used when the user has reduced motion preferences enabled.
+     * 
+     * @returns {void}
+     */
     function drawGridStatic() {
       for (let i = 0; i < yLines.length; i++) {
         const y = yLines[i];
@@ -124,7 +220,9 @@ export function startBackground() {
 }
 
 /**
- * Cleans up and removes the p5.js background animation instance
+ * Cleans up and removes the p5.js background animation instance.
+ * Removes the canvas element and resets the instance reference.
+ * 
  * @returns {void}
  */
 export function destroyBackground() {

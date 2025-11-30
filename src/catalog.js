@@ -75,7 +75,6 @@ function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, e
         src="${embedUrl}" 
         frameborder="0" 
         allowfullscreen 
-        sandbox="allow-same-origin allow-scripts allow-forms allow-presentation"
         allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
         class="player-iframe"
         referrerpolicy="no-referrer"
@@ -87,17 +86,6 @@ function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, e
   document.body.style.overflow = 'hidden';
   
   const iframe = modal.querySelector('.player-iframe');
-  iframe.addEventListener('load', () => {
-    try {
-      if (iframe.contentWindow) {
-        const originalOpen = iframe.contentWindow.open;
-        iframe.contentWindow.open = function() {
-          return null;
-        };
-      }
-    } catch (e) {
-    }
-  });
   
   if (isAnime && tmdbId) {
     const audioButtons = modal.querySelectorAll('.audio-btn');
@@ -139,7 +127,35 @@ function openPlayerModal(embedUrl, isAnime = false, tmdbId = null, season = 1, e
  * @param {(id:number, media:'movie'|'tv') => string} [config.getGenreName]
  */
 export async function startCatalogPage(config) {
-  setupDropdowns(config.mediaType);
+  let initialFilterState = null;
+  
+  const getFilterState = () => {
+    const sortLabel = document.querySelector('.sort-toggle .sort-label')?.textContent || 'Most Popular';
+    const timeValue = document.querySelector('.time-toggle')?.getAttribute('data-value') || 'all';
+    const selectedGenres = Array.from(document.querySelectorAll('.genre-input[data-genre-id]:checked'))
+      .map(input => Number(input.getAttribute('data-genre-id')))
+      .sort((a, b) => a - b);
+    return JSON.stringify({ sortLabel, timeValue, selectedGenres });
+  };
+  
+  const updateSearchButtonState = () => {
+    const applyBtn = document.querySelector('.apply-filters');
+    if (!applyBtn) return;
+    
+    if (initialFilterState === null) {
+      initialFilterState = getFilterState();
+      return;
+    }
+    
+    const currentState = getFilterState();
+    if (currentState !== initialFilterState) {
+      applyBtn.classList.add('filters-changed');
+    } else {
+      applyBtn.classList.remove('filters-changed');
+    }
+  };
+  
+  setupDropdowns(config.mediaType, updateSearchButtonState);
   try {
     const sortMenu = document.getElementById('sort-menu');
     if (sortMenu) {
@@ -153,6 +169,7 @@ export async function startCatalogPage(config) {
     if (genresPanel) genresPanel.setAttribute('role','dialog');
     if (genresToggle && genresPanel) genresToggle.setAttribute('aria-controls','genres-panel');
   } catch {}
+  
   const refresh = async () => {
     const filters = resolveFilters();
     await startFeaturedHero(config, Object.assign({}, filters));
@@ -163,10 +180,25 @@ export async function startCatalogPage(config) {
     } else {
       await renderRails(config, Object.assign({}, filters));
     }
+    initialFilterState = getFilterState();
+    updateSearchButtonState();
   };
-  setupControls(() => { refresh(); });
-  setupGenres(config);
+  
+  const refreshAndUpdateState = () => {
+    initialFilterState = getFilterState();
+    updateSearchButtonState();
+    refresh();
+  };
+  
+  setupControls(refreshAndUpdateState);
+  setupGenres(config, updateSearchButtonState);
   await refresh();
+  
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('.genre-input')) {
+      updateSearchButtonState();
+    }
+  });
 }
 
 export function createMoviesConfig() {
@@ -204,8 +236,9 @@ function defaultGetGenreName(id, media) {
 /**
  * Set up sort and time filter dropdowns
  * @param {string} mediaType
+ * @param {Function} [onFilterChange]
  */
-function setupDropdowns(mediaType) {
+function setupDropdowns(mediaType, onFilterChange) {
   const sortGroup = document.querySelector('.sort-group');
   const sortToggle = document.querySelector('.sort-toggle');
   const sortMenu = document.getElementById('sort-menu');
@@ -220,8 +253,6 @@ function setupDropdowns(mediaType) {
       const state = readState();
       if (state && state.sortLabel) {
         if (sortLabel) sortLabel.textContent = state.sortLabel;
-        const dir = state.sortDir || 'desc';
-        if (sortArrow) { sortArrow.setAttribute('data-dir', dir); sortArrow.textContent = dir === 'asc' ? '↑' : '↓'; }
       }
     } catch {}
     const closeMenu = () => { sortMenu.classList.remove('open'); sortToggle.setAttribute('aria-expanded', 'false'); };
@@ -233,9 +264,18 @@ function setupDropdowns(mediaType) {
       const label = option.getAttribute('data-label') || '';
       const dir = option.getAttribute('data-dir') || 'desc';
       if (sortLabel) sortLabel.textContent = label;
-      if (sortArrow) { sortArrow.setAttribute('data-dir', dir); sortArrow.textContent = dir === 'asc' ? '↑' : '↓'; }
       writeState({ sortLabel: label, sortDir: dir });
       closeMenu();
+      if (onFilterChange) {
+        setTimeout(() => onFilterChange(), 10);
+      }
+    });
+    
+    sortMenu.querySelectorAll('.sort-option').forEach(opt => {
+      opt.addEventListener('mouseenter', () => {
+        sortMenu.querySelectorAll('.sort-option').forEach(o => o.classList.remove('highlighted'));
+        opt.classList.add('highlighted');
+      });
     });
     document.addEventListener('click', (e) => { if (!sortGroup.contains(e.target)) closeMenu(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); sortToggle.focus(); } });
@@ -270,6 +310,9 @@ function setupDropdowns(mediaType) {
       timeToggle.setAttribute('data-value', value);
       closeMenu();
       writeState({ timeValue: value });
+      if (onFilterChange) {
+        setTimeout(() => onFilterChange(), 10);
+      }
     });
     document.addEventListener('click', (e) => { if (!timeGroup.contains(e.target)) closeMenu(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); timeToggle.focus(); } });
@@ -297,19 +340,20 @@ function setupControls(onApply) {
       if (genresCounter) genresCounter.style.display = 'none';
       if (sortToggle) {
         const sortLabel = sortToggle.querySelector('.sort-label');
-        const sortArrow = sortToggle.querySelector('.sort-arrow');
-        if (sortLabel && sortArrow) { sortLabel.textContent = 'Popularity'; sortArrow.setAttribute('data-dir', 'desc'); sortArrow.textContent = '↓'; }
+        if (sortLabel) sortLabel.textContent = 'Most Popular';
       }
       if (timeToggle) {
         const timeLabel = timeToggle.querySelector('.time-label');
         if (timeLabel) timeLabel.textContent = 'All time';
         timeToggle.setAttribute('data-value', 'all');
       }
+      const applyBtn = document.querySelector('.apply-filters');
+      if (applyBtn) applyBtn.classList.remove('filters-changed');
       clearFiltersBtn.blur();
       onApply();
       try {
         const storageKey = `mn:filters:${(document.querySelector('main .page-title')?.textContent || '').toLowerCase().includes('tv') ? 'tv' : 'movie'}`;
-        const next = { sortLabel: 'Popularity', sortDir: 'desc', timeValue: 'all', selectedGenreIds: [], mustContainAll: false };
+        const next = { sortLabel: 'Most Popular', sortDir: 'desc', timeValue: 'all', selectedGenreIds: [], mustContainAll: false };
         sessionStorage.setItem(storageKey, JSON.stringify(next));
       } catch {}
     });
@@ -317,15 +361,20 @@ function setupControls(onApply) {
 
   const applyBtn = document.querySelector('.apply-filters');
   if (applyBtn) {
-    applyBtn.addEventListener('click', () => { onApply(); applyBtn.blur(); });
+    applyBtn.addEventListener('click', () => { 
+      applyBtn.classList.remove('filters-changed');
+      onApply(); 
+      applyBtn.blur(); 
+    });
   }
 }
 
 /**
  * Set up genre filter panel
  * @param {Object} config
+ * @param {Function} [onChange] - Callback when genres change
  */
-function setupGenres(config) {
+function setupGenres(config, onChange) {
   const genresToggle = document.querySelector('.genres-toggle');
   const genresPanel = document.getElementById('genres-panel');
   const genresCounter = document.querySelector('.genres-counter');
@@ -350,7 +399,12 @@ function setupGenres(config) {
         allLi.innerHTML = `<input class="genre-input" type="checkbox" id="${allId}" data-all-match="true"><label class="genre-label" for="${allId}">Must contain all genres</label>`;
         list.appendChild(allLi);
         const genreInputs = document.querySelectorAll('.genre-input');
-        genreInputs.forEach(input => { input.addEventListener('change', updateGenreCounter); });
+        genreInputs.forEach(input => { 
+          input.addEventListener('change', () => {
+            updateGenreCounter();
+            if (onChange) onChange();
+          });
+        });
         try {
           const storageKey = `mn:filters:${config.mediaType || 'movie'}`;
           const raw = sessionStorage.getItem(storageKey);
@@ -421,14 +475,31 @@ function setupGenres(config) {
  */
 function resolveFilters() {
   const sortToggle = document.querySelector('.sort-toggle');
-  const sortArrow = sortToggle ? sortToggle.querySelector('.sort-arrow') : null;
-  const sortDir = (sortArrow && sortArrow.getAttribute('data-dir')) || 'desc';
-  const sortLabel = sortToggle ? (sortToggle.querySelector('.sort-label')?.textContent || 'Popularity') : 'Popularity';
-  let sortBy = 'popularity.desc';
+  const sortLabel = sortToggle ? (sortToggle.querySelector('.sort-label')?.textContent || 'Most Popular') : 'Most Popular';
   const lower = sortLabel.toLowerCase();
-  if (lower.includes('rating')) sortBy = `vote_average.${sortDir}`;
-  else if (lower.includes('newest')) sortBy = `primary_release_date.${sortDir}`;
-  else sortBy = `popularity.${sortDir}`;
+  
+  let sortBy = 'popularity.desc';
+  let sortDir = 'desc';
+  
+  if (lower.includes('highest rated')) {
+    sortBy = 'vote_average.desc';
+    sortDir = 'desc';
+  } else if (lower.includes('lowest rated')) {
+    sortBy = 'vote_average.asc';
+    sortDir = 'asc';
+  } else if (lower.includes('newest first')) {
+    sortBy = 'primary_release_date.desc';
+    sortDir = 'desc';
+  } else if (lower.includes('oldest first')) {
+    sortBy = 'primary_release_date.asc';
+    sortDir = 'asc';
+  } else if (lower.includes('least popular')) {
+    sortBy = 'popularity.asc';
+    sortDir = 'asc';
+  } else {
+    sortBy = 'popularity.desc';
+    sortDir = 'desc';
+  }
 
   const timeToggle = document.querySelector('.time-toggle');
   const timeValue = (timeToggle && timeToggle.getAttribute('data-value')) || 'all';
@@ -493,21 +564,9 @@ async function startFeaturedHero(config, filters) {
   if (!hero) return;
   try {
     hero.classList.add('loading');
-    const isRatingSort = filters.sortBy.startsWith('vote_average');
-    const isAllTime = !filters.startDate && !filters.endDate;
-    const voteCountMin = isRatingSort ? (isAllTime ? VOTE_COUNT_MIN_RATING_ALLTIME : VOTE_COUNT_MIN_RATING_WINDOWED) : VOTE_COUNT_MIN_BASIC;
-    const strongSignals = isRatingSort ? { voteAverageGte: VOTE_AVERAGE_MIN, voteCountGte: voteCountMin } : { voteCountGte: voteCountMin };
-    const normalizeSort = (s, media) => media === 'tv' ? s.replace('primary_release_date', 'first_air_date') : s;
-    const sort = normalizeSort(filters.sortBy, config.mediaType);
-    const releaseDesc = config.mediaType === 'tv' ? 'first_air_date.desc' : 'primary_release_date.desc';
-    const [primary, relaxed, backup] = await Promise.all([
-      config.discover({ sortBy: sort, startDate: filters.startDate, endDate: filters.endDate, genreIds: filters.selectedGenreIds, page: 1, ...strongSignals }),
-      config.discover({ sortBy: releaseDesc, startDate: filters.startDate, endDate: filters.endDate, genreIds: filters.selectedGenreIds, page: 1 }),
-      config.mediaType === 'tv' ? getTrendingTV() : getPopularMoviesLast7Days()
-    ]);
-    let results = Array.isArray(primary?.results) && primary.results.length ? primary.results
-      : (Array.isArray(relaxed?.results) && relaxed.results.length ? relaxed.results
-      : (Array.isArray(backup?.results) ? backup.results : []));
+    
+    const weekData = config.mediaType === 'tv' ? await getTrendingTV() : await getPopularMoviesLast7Days();
+    let results = Array.isArray(weekData?.results) ? weekData.results : [];
     results = results.filter(m => m && (m.backdrop_path || m.poster_path));
 
     try {
@@ -526,6 +585,16 @@ async function startFeaturedHero(config, filters) {
     hero.style.display = '';
 
     hero.innerHTML = `
+      <button class="hero-nav-btn hero-nav-btn-left" aria-label="Previous" type="button">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 18l-6-6 6-6"/>
+        </svg>
+      </button>
+      <button class="hero-nav-btn hero-nav-btn-right" aria-label="Next" type="button">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      </button>
       <div class="featured-hero-bg"></div>
       <div class="featured-hero-overlay"></div>
       <div class="featured-hero-content"></div>
@@ -533,6 +602,8 @@ async function startFeaturedHero(config, filters) {
 
     const bgEl = hero.querySelector('.featured-hero-bg');
     const contentEl = hero.querySelector('.featured-hero-content');
+    const prevBtn = hero.querySelector('.hero-nav-btn-left');
+    const nextBtn = hero.querySelector('.hero-nav-btn-right');
 
     /**
      * Pick a random hero image for an item
@@ -620,19 +691,52 @@ async function startFeaturedHero(config, filters) {
       hero.classList.add('ready');
     };
 
-    try { if (hero.dataset.featureTimerId) { window.clearInterval(Number(hero.dataset.featureTimerId)); delete hero.dataset.featureTimerId; } } catch {}
-
     let index = 0;
     await renderSlide(results[index]);
-    const advance = () => { index = (index + 1) % results.length; renderSlide(results[index]); };
-    let timer = window.setInterval(advance, HERO_ROTATION_INTERVAL_MS);
-    hero.dataset.featureTimerId = String(timer);
-    const pause = () => { if (timer) { window.clearInterval(timer); timer = null; } };
-    const resume = () => { if (!timer) { timer = window.setInterval(advance, HERO_ROTATION_INTERVAL_MS); } };
-    hero.addEventListener('mouseenter', pause);
-    hero.addEventListener('mouseleave', resume);
-    hero.addEventListener('focusin', pause);
-    hero.addEventListener('focusout', resume);
+    
+    const updateNavButtons = () => {
+      if (results.length <= 1) {
+        prevBtn.classList.remove('visible');
+        nextBtn.classList.remove('visible');
+        return;
+      }
+    };
+    
+    const goToSlide = (newIndex) => {
+      if (newIndex < 0) newIndex = results.length - 1;
+      if (newIndex >= results.length) newIndex = 0;
+      index = newIndex;
+      renderSlide(results[index]);
+    };
+    
+    const goPrev = () => goToSlide(index - 1);
+    const goNext = () => goToSlide(index + 1);
+    
+    prevBtn.addEventListener('click', goPrev);
+    nextBtn.addEventListener('click', goNext);
+    
+    updateNavButtons();
+    
+    let showLeftBtn = false;
+    let showRightBtn = false;
+    
+    hero.addEventListener('mousemove', (e) => {
+      const rect = hero.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const heroWidth = rect.width;
+      const threshold = heroWidth * 0.15;
+      
+      showLeftBtn = mouseX < threshold;
+      showRightBtn = mouseX > heroWidth - threshold;
+      
+      prevBtn.classList.toggle('visible', showLeftBtn);
+      nextBtn.classList.toggle('visible', showRightBtn);
+    });
+    
+    hero.addEventListener('mouseleave', () => {
+      prevBtn.classList.remove('visible');
+      nextBtn.classList.remove('visible');
+    });
   } catch (e) {
     console.error('Failed to start featured hero for', config.mediaType, e);
     hero.style.display = 'none';
