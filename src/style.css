@@ -10,6 +10,7 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: none;
 }
 
 html, body {
@@ -82,10 +83,6 @@ canvas.p5Canvas {
   z-index: -1 !important;
 }
 
-* {
-  scrollbar-width: none;
-}
-
 *::-webkit-scrollbar {
   width: 0;
   height: 0;
@@ -103,6 +100,9 @@ canvas.p5Canvas {
   border-bottom: 1px solid rgba(255,255,255,0.12);
   backdrop-filter: blur(20px) saturate(120%);
   -webkit-backdrop-filter: blur(20px) saturate(120%);
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .header-row {
@@ -135,10 +135,8 @@ canvas.p5Canvas {
   display: flex;
   gap: 18px;
   align-items: center;
+  width: 100%;
 }
-
-/* Allow search to occupy inline space and push links */
-.nav-list { width: 100%; }
 .nav-list > li { flex: 0 0 auto; }
 
 .nav-link {
@@ -287,6 +285,10 @@ canvas.p5Canvas {
   margin: 0 0 12px;
   font-size: 18px;
   color: var(--muted);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Optional subtitles under section titles */
@@ -482,8 +484,8 @@ canvas.p5Canvas {
   border-color: rgba(255,255,255,0.18);
 }
 .genre-input[data-all-match]:checked + .genre-label {
+  background-color: rgba(107,138,253,0.18);
   background-image: none;
-  background: rgba(107,138,253,0.18);
   border-color: rgba(107,138,253,0.55);
   color: var(--text);
 }
@@ -775,15 +777,11 @@ canvas.p5Canvas {
   }
 }
 
-/* Sticky header */
-.site-header { position: sticky; top: 0; z-index: 50; }
-
 /* Rails (horizontal carousels) */
 .rail { margin: 24px 0; }
 .genre-rails > .rail + .rail { margin-top: 40px; }
 .rail-head { display:flex; justify-content:space-between; align-items:center; margin:0 0 10px; }
 .rail-cta { display:flex; gap:8px; }
-.section-title { position: relative; display: inline-flex; align-items: center; gap: 6px; }
 .list-title-actions { display: inline-flex; gap:6px; margin-left: 6px; opacity: 0; transform: translateY(-2px); transition: opacity 0.18s ease, transform 0.18s ease; }
 .rail-head:hover .list-title-actions { opacity: 1; transform: translateY(0); }
 .rail-btn.small { width: 22px; height: 22px; border-radius: 6px; }
@@ -888,11 +886,6 @@ canvas.p5Canvas {
 
 .hero-nav-btn.visible {
   display: flex;
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.hero-nav-btn.visible {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1553,25 +1546,6 @@ canvas.p5Canvas {
 .add-to-list-btn:hover {
   background: rgba(107,138,253,0.25);
   border-color: rgba(107,138,253,0.4);
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--muted);
-  font-size: 24px;
-  cursor: pointer;
-  padding: 4px;
-  line-height: 1;
-  transition: color 120ms ease;
-}
-
-.modal-close:hover {
-  color: var(--text);
-}
-
-.modal-body {
-  padding: 24px;
 }
 
 .modal-footer {
