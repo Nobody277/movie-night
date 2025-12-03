@@ -770,12 +770,6 @@ canvas.p5Canvas {
   transform: translateX(-50%) translateY(0) scale(1);
 }
 
-@media (min-width: 1200px) {
-  .movie-grid {
-    grid-template-columns: repeat(auto-fill, minmax(var(--poster-min), 1fr));
-  }
-}
-
 /* Rails (horizontal carousels) */
 .rail { margin: 24px 0; }
 .genre-rails > .rail + .rail { margin-top: 40px; }
@@ -845,9 +839,6 @@ canvas.p5Canvas {
   opacity: 0;
   transform: translateY(-8px);
   animation: fadeDown 520ms ease-out forwards;
-}
-@media (prefers-reduced-motion: reduce) {
-  .rail.revealed .rail-track .movie-card { animation: none; opacity: 1; transform: none; }
 }
 
 /* Featured movie */
@@ -1007,22 +998,23 @@ canvas.p5Canvas {
   .featured-hero { min-height: 380px; }
   .featured-hero-content { min-height: 380px; padding: 28px; }
   .featured-title { font-size: 34px; }
+  .movie-grid {
+    grid-template-columns: repeat(auto-fill, minmax(var(--poster-min), 1fr));
+  }
 }
 
 @media (min-width: 1200px) {
   .featured-hero { min-height: 440px; }
   .featured-hero-content { min-height: 440px; padding: 34px; }
   .featured-title { font-size: 40px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rail-btn, .rail-track, .movie-card { transition: none !important; }
-}
-
-@media (min-width: 768px) {
   .movie-grid {
     grid-template-columns: repeat(auto-fill, minmax(var(--poster-min), 1fr));
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail.revealed .rail-track .movie-card { animation: none; opacity: 1; transform: none; }
+  .rail-btn, .rail-track, .movie-card { transition: none !important; }
 }
 
 /* Mobile tweaks */
