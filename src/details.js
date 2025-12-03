@@ -473,6 +473,31 @@ function parseTypeAndId() {
 }
 
 /**
+ * Fetch details with external IDs for TV shows
+ * @param {string} type
+ * @param {number} id
+ * @returns {Promise<Object>}
+ */
+async function fetchDetailsWithExternalIds(type, id) {
+  const endpoint = type === 'tv' ? `/tv/${id}` : `/movie/${id}`;
+  const details = await fetchTMDBData(endpoint);
+  if (!details) throw new Error("Missing details");
+
+  if (type === 'tv') {
+    try {
+      const externalIds = await fetchTMDBData(`/tv/${id}/external_ids`);
+      if (externalIds) {
+        details.external_ids = externalIds;
+      }
+    } catch (error) {
+      console.error('Failed to fetch external IDs:', error);
+    }
+  }
+
+  return details;
+}
+
+/**
  * Fetch details data for a title
  * @param {string} type
  * @param {number} id
@@ -480,20 +505,7 @@ function parseTypeAndId() {
  */
 async function fetchDetailsData(type, id) {
   try {
-    const endpoint = type === 'tv' ? `/tv/${id}` : `/movie/${id}`;
-    const details = await fetchTMDBData(endpoint);
-    if (!details) throw new Error("Missing details");
-
-    if (type === 'tv') {
-      try {
-        const externalIds = await fetchTMDBData(`/tv/${id}/external_ids`);
-        if (externalIds) {
-          details.external_ids = externalIds;
-        }
-      } catch (error) {
-        console.error('Failed to fetch external IDs:', error);
-      }
-    }
+    const details = await fetchDetailsWithExternalIds(type, id);
 
     const title = details.title || details.name || "Untitled";
     const year = formatYear(details.release_date || details.first_air_date);
@@ -1136,20 +1148,7 @@ export async function triggerHeroPlayer(type, id, season = 1, episode = 1) {
     
     let details;
     try {
-      const endpoint = type === 'tv' ? `/tv/${id}` : `/movie/${id}`;
-      details = await fetchTMDBData(endpoint);
-      if (!details) throw new Error("Missing details");
-      
-      if (type === 'tv') {
-        try {
-          const externalIds = await fetchTMDBData(`/tv/${id}/external_ids`);
-          if (externalIds) {
-            details.external_ids = externalIds;
-          }
-        } catch (error) {
-          console.error('Failed to fetch external IDs:', error);
-        }
-      }
+      details = await fetchDetailsWithExternalIds(type, id);
     } catch (error) {
       console.error('Failed to fetch details:', error);
       return;
