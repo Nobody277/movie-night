@@ -421,7 +421,9 @@ canvas.p5Canvas {
 
 /* Time period dropdown */
 .time-group { position: relative; }
-.time-option {
+.time-option,
+.season-option,
+.episode-filter-option {
   width: 100%;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(255,255,255,0.04);
@@ -433,17 +435,9 @@ canvas.p5Canvas {
 }
 .season-option,
 .episode-filter-option {
-  width: 100%;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.04);
-  color: var(--text);
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
   font-family: inherit;
   font-size: 14px;
   text-align: left;
-  transition: background-color 120ms ease, border-color 120ms ease;
 }
 .time-option + .time-option,
 .season-option + .season-option,
