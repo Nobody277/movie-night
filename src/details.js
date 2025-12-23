@@ -765,12 +765,15 @@ function formatRuntimeOrEpisodes(details, type) {
 }
 
 /**
- * Set up navigation buttons for the cast rail
+ * Set up navigation buttons for a horizontal scrolling rail
+ * @param {string} railSelector - CSS selector for the rail element
+ * @param {string} prevSelector - CSS selector for the previous button
+ * @param {string} nextSelector - CSS selector for the next button
  */
-function setupCastRail() {
-  const rail = document.querySelector('.detail-cast-rail');
-  const prev = document.querySelector('.detail-cast-prev');
-  const next = document.querySelector('.detail-cast-next');
+function setupRail(railSelector, prevSelector, nextSelector) {
+  const rail = document.querySelector(railSelector);
+  const prev = document.querySelector(prevSelector);
+  const next = document.querySelector(nextSelector);
   
   if (!rail) return;
   
@@ -812,6 +815,381 @@ function setupCastRail() {
   rail.addEventListener('touchstart', e => start(e.touches[0].pageX), { passive: true });
   rail.addEventListener('touchmove', e => move(e.touches[0].pageX), { passive: true });
   window.addEventListener('touchend', end);
+}
+
+/**
+ * Set up navigation buttons for the cast rail
+ */
+function setupCastRail() {
+  setupRail('.detail-cast-rail', '.detail-cast-prev', '.detail-cast-next');
+}
+
+/**
+ * Attach click handlers to image cards to open image viewer
+ * @param {string} selector - CSS selector for image cards
+ * @param {Array} images - Array of image objects
+ * @param {string} imageType - 'backdrop' or 'poster'
+ */
+function attachImageClickHandlers(selector, images, imageType) {
+  const cards = document.querySelectorAll(selector);
+  cards.forEach(card => {
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', () => {
+      const index = parseInt(card.dataset.imageIndex) || 0;
+      openImageViewer(images, imageType, index);
+    });
+  });
+}
+
+/**
+ * Open image viewer modal with zoom and navigation
+ * @param {Array} images - Array of image objects with file_path
+ * @param {string} imageType - 'backdrop' or 'poster'
+ * @param {number} startIndex - Starting image index
+ */
+function openImageViewer(images, imageType, startIndex = 0) {
+  if (!Array.isArray(images) || images.length === 0) return;
+  
+  let currentIndex = Math.max(0, Math.min(startIndex, images.length - 1));
+  let zoomLevel = 1;
+  let panX = 0;
+  let panY = 0;
+  let isDragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragStartPanX = 0;
+  let dragStartPanY = 0;
+  let controlsVisible = true;
+  
+  const modal = document.createElement('div');
+  modal.className = 'image-viewer-modal';
+  
+  const getImageUrl = (imagePath) => {
+    if (imageType === 'backdrop') {
+      return img.backdropHi(imagePath);
+    } else {
+      // Use original size for posters too
+      return imagePath ? `https://image.tmdb.org/t/p/original${imagePath}` : '';
+    }
+  };
+  
+  const updateImage = () => {
+    const currentImage = images[currentIndex];
+    if (!currentImage?.file_path) return;
+    
+    const imgElement = modal.querySelector('.image-viewer-img');
+    if (imgElement) {
+      imgElement.src = getImageUrl(currentImage.file_path);
+      imgElement.dataset.loaded = 'false';
+      imgElement.style.opacity = '0';
+    }
+    
+    const counter = modal.querySelector('.image-viewer-counter');
+    if (counter) {
+      counter.textContent = `${currentIndex + 1} / ${images.length}`;
+    }
+    
+    // Reset zoom and pan when changing images
+    zoomLevel = 1;
+    panX = 0;
+    panY = 0;
+    updateZoom();
+  };
+  
+  const getMousePositionInImage = (e) => {
+    const imgElement = modal.querySelector('.image-viewer-img');
+    const container = modal.querySelector('.image-viewer-container');
+    if (!imgElement || !container) return { x: 0, y: 0 };
+    
+    const rect = container.getBoundingClientRect();
+    const containerCenterX = rect.left + rect.width / 2;
+    const containerCenterY = rect.top + rect.height / 2;
+    
+    // Mouse position relative to container center
+    const mouseX = e.clientX - containerCenterX;
+    const mouseY = e.clientY - containerCenterY;
+    
+    return { x: mouseX, y: mouseY };
+  };
+  
+  const zoomAtPoint = (delta, mouseX, mouseY) => {
+    const oldZoom = zoomLevel;
+    const zoomFactor = delta > 0 ? 1.2 : 1 / 1.2;
+    const newZoom = Math.max(1, Math.min(zoomLevel * zoomFactor, 5));
+    
+    if (newZoom === oldZoom) return;
+    
+    // Calculate the point in image coordinates before zoom
+    const pointX = (mouseX - panX * oldZoom) / oldZoom;
+    const pointY = (mouseY - panY * oldZoom) / oldZoom;
+    
+    // Calculate new pan to keep the point under the mouse
+    panX = (mouseX - pointX * newZoom) / newZoom;
+    panY = (mouseY - pointY * newZoom) / newZoom;
+    
+    zoomLevel = newZoom;
+    
+    // Reset pan if zoomed out to 1x
+    if (zoomLevel === 1) {
+      panX = 0;
+      panY = 0;
+    }
+    
+    updateZoom();
+  };
+  
+  const updateZoom = () => {
+    const imgElement = modal.querySelector('.image-viewer-img');
+    const container = modal.querySelector('.image-viewer-container');
+    if (!imgElement || !container) return;
+    
+    imgElement.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+    container.classList.toggle('zoomed', zoomLevel > 1);
+  };
+  
+  const resetZoom = () => {
+    zoomLevel = 1;
+    panX = 0;
+    panY = 0;
+    updateZoom();
+  };
+  
+  const toggleControls = () => {
+    controlsVisible = !controlsVisible;
+    const controls = modal.querySelector('.image-viewer-controls');
+    const navButtons = modal.querySelectorAll('.image-viewer-nav');
+    const eyeBtn = modal.querySelector('.image-viewer-toggle-controls');
+    
+    if (controls) {
+      controls.classList.toggle('hidden', !controlsVisible);
+    }
+    
+    navButtons.forEach(btn => {
+      btn.classList.toggle('hidden', !controlsVisible);
+    });
+    
+    if (eyeBtn) {
+      eyeBtn.innerHTML = controlsVisible 
+        ? `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><path d="M15.008,6.083l.881-1.441c.216-.354,.105-.815-.248-1.031-.354-.215-.815-.105-1.031,.248l-.907,1.482c-.678-.331-1.388-.588-2.124-.769l.333-1.655c.082-.406-.182-.802-.587-.883-.405-.078-.802,.181-.883,.587l-.339,1.685c-.364-.037-.732-.057-1.103-.057s-.739,.02-1.103,.057l-.339-1.685c-.082-.406-.48-.666-.883-.587-.406,.082-.669,.477-.587,.883l.333,1.655c-.736,.181-1.446,.438-2.124,.769l-.907-1.482c-.215-.353-.677-.463-1.031-.248-.353,.216-.464,.678-.248,1.031l.881,1.441c-.594,.402-1.154,.867-1.668,1.392-.29,.295-.285,.771,.011,1.061,.295,.29,.77,.285,1.061-.011,1.754-1.789,4.1-2.774,6.605-2.774s4.851,.985,6.605,2.774c.147,.15,.341,.225,.536,.225,.189,0,.379-.071,.525-.214,.296-.29,.301-.765,.011-1.061-.515-.525-1.074-.99-1.668-1.392Z" fill="currentColor"/><circle cx="9" cy="10.5" r="3.5" fill="currentColor"/></svg>`
+        : `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><path d="M16.666,6.734c-.295-.29-.77-.285-1.061,.011-1.754,1.789-4.1,2.774-6.605,2.774s-4.851-.985-6.605-2.774c-.29-.295-.765-.3-1.061-.011-.296,.29-.301,.765-.011,1.061,.515,.525,1.074,.99,1.669,1.393l-.881,1.441c-.216,.353-.105,.815,.249,1.031,.122,.075,.257,.11,.391,.11,.252,0,.499-.127,.64-.359l.906-1.482c.678,.331,1.388,.588,2.124,.769l-.333,1.655c-.082,.406,.182,.802,.587,.883,.05,.01,.1,.015,.149,.015,.35,0,.663-.246,.734-.602l.339-1.685c.364,.037,.732,.057,1.103,.057s.739-.02,1.103-.057l.339,1.685c.072,.356,.385,.602,.734,.602,.049,0,.099-.005,.149-.015,.406-.082,.669-.477,.587-.883l-.333-1.655c.736-.181,1.446-.438,2.124-.769l.906,1.482c.141,.231,.388,.359,.64,.359,.134,0,.269-.036,.391-.11,.354-.216,.465-.678,.249-1.031l-.881-1.441c.594-.403,1.154-.867,1.669-1.393,.29-.295,.285-.771-.011-1.061Z" fill="currentColor"/></svg>`;
+    }
+  };
+  
+  const nextImage = () => {
+    if (currentIndex < images.length - 1) {
+      currentIndex++;
+      updateImage();
+      const prevBtn = modal.querySelector('.image-viewer-prev');
+      const nextBtn = modal.querySelector('.image-viewer-next');
+      if (prevBtn) prevBtn.disabled = currentIndex === 0;
+      if (nextBtn) nextBtn.disabled = currentIndex === images.length - 1;
+    }
+  };
+  
+  const prevImage = () => {
+    if (currentIndex > 0) {
+      currentIndex--;
+      updateImage();
+      const prevBtn = modal.querySelector('.image-viewer-prev');
+      const nextBtn = modal.querySelector('.image-viewer-next');
+      if (prevBtn) prevBtn.disabled = currentIndex === 0;
+      if (nextBtn) nextBtn.disabled = currentIndex === images.length - 1;
+    }
+  };
+  
+  modal.innerHTML = `
+    <div class="image-viewer-overlay"></div>
+    <button class="image-viewer-close" aria-label="Close viewer" type="button">&times;</button>
+    <button class="image-viewer-toggle-controls" aria-label="Toggle controls" type="button" title="Toggle controls">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"><path d="M15.008,6.083l.881-1.441c.216-.354,.105-.815-.248-1.031-.354-.215-.815-.105-1.031,.248l-.907,1.482c-.678-.331-1.388-.588-2.124-.769l.333-1.655c.082-.406-.182-.802-.587-.883-.405-.078-.802,.181-.883,.587l-.339,1.685c-.364-.037-.732-.057-1.103-.057s-.739,.02-1.103,.057l-.339-1.685c-.082-.406-.48-.666-.883-.587-.406,.082-.669,.477-.587,.883l.333,1.655c-.736,.181-1.446,.438-2.124,.769l-.907-1.482c-.215-.353-.677-.463-1.031-.248-.353,.216-.464,.678-.248,1.031l.881,1.441c-.594,.402-1.154,.867-1.668,1.392-.29,.295-.285,.771,.011,1.061,.295,.29,.77,.285,1.061-.011,1.754-1.789,4.1-2.774,6.605-2.774s4.851,.985,6.605,2.774c.147,.15,.341,.225,.536,.225,.189,0,.379-.071,.525-.214,.296-.29,.301-.765,.011-1.061-.515-.525-1.074-.99-1.668-1.392Z" fill="currentColor"/><circle cx="9" cy="10.5" r="3.5" fill="currentColor"/></svg>
+    </button>
+    <button class="image-viewer-nav image-viewer-prev" aria-label="Previous image" type="button" ${currentIndex === 0 ? 'disabled' : ''}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M15 18l-6-6 6-6"/>
+      </svg>
+    </button>
+    <button class="image-viewer-nav image-viewer-next" aria-label="Next image" type="button" ${currentIndex === images.length - 1 ? 'disabled' : ''}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 18l6-6-6-6"/>
+      </svg>
+    </button>
+    <div class="image-viewer-container">
+      <img class="image-viewer-img" src="${getImageUrl(images[currentIndex]?.file_path)}" alt="${imageType === 'backdrop' ? 'Backdrop' : 'Poster'}" />
+    </div>
+    <div class="image-viewer-controls">
+      <div class="image-viewer-counter">${currentIndex + 1} / ${images.length}</div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  document.body.style.overflow = 'hidden';
+  
+  const imgElement = modal.querySelector('.image-viewer-img');
+  const container = modal.querySelector('.image-viewer-container');
+  const closeBtn = modal.querySelector('.image-viewer-close');
+  const prevBtn = modal.querySelector('.image-viewer-prev');
+  const nextBtn = modal.querySelector('.image-viewer-next');
+  const toggleControlsBtn = modal.querySelector('.image-viewer-toggle-controls');
+  
+  // Image load handler
+  if (imgElement) {
+    imgElement.addEventListener('load', () => {
+      imgElement.dataset.loaded = 'true';
+      imgElement.style.opacity = '1';
+    });
+  }
+  
+  // Close handlers
+  const closeViewer = () => {
+    modal.remove();
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', handleKeydown);
+  };
+  
+  closeBtn?.addEventListener('click', closeViewer);
+  modal.querySelector('.image-viewer-overlay')?.addEventListener('click', closeViewer);
+  
+  // Toggle controls handler
+  toggleControlsBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleControls();
+  });
+  
+  // Navigation handlers
+  prevBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    prevImage();
+  });
+  
+  nextBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    nextImage();
+  });
+  
+  // Mouse wheel zoom at mouse position
+  container?.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const mousePos = getMousePositionInImage(e);
+    zoomAtPoint(e.deltaY, mousePos.x, mousePos.y);
+  }, { passive: false });
+  
+  // Drag to pan when zoomed
+  container?.addEventListener('mousedown', (e) => {
+    if (zoomLevel > 1) {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragStartPanX = panX;
+      dragStartPanY = panY;
+      container.style.cursor = 'grabbing';
+    }
+  });
+  
+  window.addEventListener('mousemove', (e) => {
+    if (isDragging && zoomLevel > 1) {
+      panX = dragStartPanX + (e.clientX - dragStartX) / zoomLevel;
+      panY = dragStartPanY + (e.clientY - dragStartY) / zoomLevel;
+      updateZoom();
+    }
+  });
+  
+  window.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      if (container) container.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
+    }
+  });
+  
+  // Touch support for pinch zoom and pan
+  let touchStartDistance = 0;
+  let touchStartZoom = 1;
+  let touchStartPanX = 0;
+  let touchStartPanY = 0;
+  let touchStartCenterX = 0;
+  let touchStartCenterY = 0;
+  
+  container?.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      touchStartDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+      touchStartZoom = zoomLevel;
+      touchStartPanX = panX;
+      touchStartPanY = panY;
+      
+      const rect = container.getBoundingClientRect();
+      touchStartCenterX = ((touch1.clientX + touch2.clientX) / 2) - (rect.left + rect.width / 2);
+      touchStartCenterY = ((touch1.clientY + touch2.clientY) / 2) - (rect.top + rect.height / 2);
+    } else if (e.touches.length === 1 && zoomLevel > 1) {
+      isDragging = true;
+      dragStartX = e.touches[0].clientX;
+      dragStartY = e.touches[0].clientY;
+      dragStartPanX = panX;
+      dragStartPanY = panY;
+    }
+  }, { passive: true });
+  
+  container?.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const touch1 = e.touches[0];
+      const touch2 = e.touches[1];
+      const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+      const scale = distance / touchStartDistance;
+      const newZoom = Math.max(1, Math.min(touchStartZoom * scale, 5));
+      
+      if (newZoom !== zoomLevel) {
+        const rect = container.getBoundingClientRect();
+        const centerX = ((touch1.clientX + touch2.clientX) / 2) - (rect.left + rect.width / 2);
+        const centerY = ((touch1.clientY + touch2.clientY) / 2) - (rect.top + rect.height / 2);
+        
+        const pointX = (centerX - touchStartPanX * touchStartZoom) / touchStartZoom;
+        const pointY = (centerY - touchStartPanY * touchStartZoom) / touchStartZoom;
+        
+        panX = (centerX - pointX * newZoom) / newZoom;
+        panY = (centerY - pointY * newZoom) / newZoom;
+        zoomLevel = newZoom;
+        
+        if (zoomLevel === 1) {
+          panX = 0;
+          panY = 0;
+        }
+        
+        updateZoom();
+      }
+    } else if (e.touches.length === 1 && isDragging && zoomLevel > 1) {
+      e.preventDefault();
+      panX = dragStartPanX + (e.touches[0].clientX - dragStartX) / zoomLevel;
+      panY = dragStartPanY + (e.touches[0].clientY - dragStartY) / zoomLevel;
+      updateZoom();
+    }
+  }, { passive: false });
+  
+  container?.addEventListener('touchend', () => {
+    isDragging = false;
+  }, { passive: true });
+  
+  // Keyboard handlers
+  const handleKeydown = (e) => {
+    if (e.key === 'Escape') {
+      closeViewer();
+    } else if (e.key === 'ArrowLeft') {
+      prevImage();
+    } else if (e.key === 'ArrowRight') {
+      nextImage();
+    } else if (e.key === '0') {
+      resetZoom();
+    } else if (e.key === 'h' || e.key === 'H') {
+      toggleControls();
+    }
+  };
+  
+  document.addEventListener('keydown', handleKeydown);
+  
+  // Update cursor when zoomed
+  if (container) {
+    container.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
+  }
 }
 
 /**
@@ -969,9 +1347,87 @@ async function renderDetailsBody(type, id, details, myToken, currentDetailsToken
       html += '</div></div>';
     }
     
+    // Fetch images for backdrops and posters sections
+    let imagesData = null;
+    try {
+      imagesData = await fetchTitleImages(type, id);
+    } catch (error) {
+      console.error('Failed to fetch images:', error);
+    }
+    
+    if (myToken !== currentDetailsToken) return;
+    
+    // Render backdrops section
+    const backdrops = Array.isArray(imagesData?.backdrops) ? imagesData.backdrops : [];
+    if (backdrops.length > 0) {
+      html += `
+        <div class="detail-section">
+          <div class="detail-cast-header">
+            <h3 class="detail-title">Backdrops</h3>
+            <div class="detail-cast-cta">
+              <button class="rail-btn detail-backdrops-prev" aria-label="Scroll left" type="button">
+                <span class="rail-icon">‹</span>
+              </button>
+              <button class="rail-btn detail-backdrops-next" aria-label="Scroll right" type="button">
+                <span class="rail-icon">›</span>
+              </button>
+            </div>
+          </div>
+          <div class="detail-images-rail detail-backdrops-rail" tabindex="0">
+      `;
+      backdrops.slice(0, 20).forEach((image, index) => {
+        if (!image?.file_path) return;
+        const imgUrl = img.backdrop(image.file_path);
+        html += `
+          <div class="detail-image-card" data-image-type="backdrop" data-image-index="${index}" data-image-path="${image.file_path}">
+            <img src="${imgUrl}" alt="Backdrop" class="detail-image-img" loading="lazy">
+          </div>
+        `;
+      });
+      html += '</div></div>';
+    }
+    
+    // Render posters section
+    const posters = Array.isArray(imagesData?.posters) ? imagesData.posters : [];
+    if (posters.length > 0) {
+      html += `
+        <div class="detail-section">
+          <div class="detail-cast-header">
+            <h3 class="detail-title">Posters</h3>
+            <div class="detail-cast-cta">
+              <button class="rail-btn detail-posters-prev" aria-label="Scroll left" type="button">
+                <span class="rail-icon">‹</span>
+              </button>
+              <button class="rail-btn detail-posters-next" aria-label="Scroll right" type="button">
+                <span class="rail-icon">›</span>
+              </button>
+            </div>
+          </div>
+          <div class="detail-images-rail detail-posters-rail" tabindex="0">
+      `;
+      posters.slice(0, 20).forEach((image, index) => {
+        if (!image?.file_path) return;
+        const imgUrl = img.poster(image.file_path);
+        html += `
+          <div class="detail-image-card" data-image-type="poster" data-image-index="${index}" data-image-path="${image.file_path}">
+            <img src="${imgUrl}" alt="Poster" class="detail-image-img" loading="lazy">
+          </div>
+        `;
+      });
+      html += '</div></div>';
+    }
+    
     bodyEl.innerHTML = html;
     
     setupCastRail();
+    if (backdrops.length > 0) {
+      setupRail('.detail-backdrops-rail', '.detail-backdrops-prev', '.detail-backdrops-next');
+      attachImageClickHandlers('.detail-backdrops-rail .detail-image-card', backdrops, 'backdrop');
+    }
+    if (posters.length > 0) {
+      setupRail('.detail-posters-rail', '.detail-posters-prev', '.detail-posters-next');
+      attachImageClickHandlers('.detail-posters-rail .detail-image-card', posters, 'poster');
+    }
     
     if (type === 'tv' && details.number_of_seasons > 0) {
       const seasonToggle = document.getElementById('season-toggle');
