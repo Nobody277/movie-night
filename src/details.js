@@ -827,10 +827,35 @@ async function renderDetailsBody(type, id, details, myToken, currentDetailsToken
   if (!bodyEl) return;
   
   try {
-    const credits = await fetchTMDBData(`/${type}/${id}/credits`);
+    const normalizeTvAggregateCast = (arr) => {
+      const castArr = Array.isArray(arr) ? arr : [];
+      return castArr.map((p) => {
+        const role0 = Array.isArray(p?.roles) ? p.roles[0] : null;
+        const character = (role0 && role0.character) ? role0.character : (p?.character || '');
+        const episodeCount = Array.isArray(p?.roles)
+          ? p.roles.reduce((sum, r) => sum + (Number(r?.episode_count) || 0), 0)
+          : (Number(p?.total_episode_count) || 0);
+        return { ...p, character, episodeCount };
+      });
+    };
+
+    let cast = [];
+    let crew = [];
+
+    if (type === 'tv') {
+      const [aggCredits, stdCredits] = await Promise.all([
+        fetchTMDBData(`/tv/${id}/aggregate_credits`),
+        fetchTMDBData(`/tv/${id}/credits`)
+      ]);
+      cast = normalizeTvAggregateCast(Array.isArray(aggCredits?.cast) ? aggCredits.cast : []);
+      crew = Array.isArray(stdCredits?.crew) ? stdCredits.crew : [];
+    } else {
+      const credits = await fetchTMDBData(`/movie/${id}/credits`);
+      cast = Array.isArray(credits?.cast) ? credits.cast : [];
+      crew = Array.isArray(credits?.crew) ? credits.crew : [];
+    }
+
     if (myToken !== currentDetailsToken) return;
-    const cast = Array.isArray(credits?.cast) ? credits.cast : [];
-    const crew = Array.isArray(credits?.crew) ? credits.crew : [];
     const director = crew.find(c => c.job === 'Director');
     const writers = crew.filter(c => c.department === 'Writing').slice(0, 3);
     const producers = crew.filter(c => c.job === 'Producer' || c.job === 'Executive Producer').slice(0, 2);
@@ -877,8 +902,8 @@ async function renderDetailsBody(type, id, details, myToken, currentDetailsToken
       `;
     }
     
-    const castWithImages = cast.filter(person => person.profile_path);
-    if (castWithImages.length > 0) {
+    const castList = cast.slice(0, 30);
+    if (castList.length > 0) {
       html += `
         <div class="detail-section">
           <div class="detail-cast-header">
@@ -894,13 +919,25 @@ async function renderDetailsBody(type, id, details, myToken, currentDetailsToken
           </div>
           <div class="detail-cast-rail" tabindex="0">
       `;
-      castWithImages.forEach(person => {
-        const imgUrl = img.poster(person.profile_path);
+      castList.forEach(person => {
+        const hasProfile = Boolean(person?.profile_path);
+        const imgUrl = hasProfile ? img.poster(person.profile_path) : '';
+        const eps = Number(person?.episodeCount) || 0;
+        const epsLabel = eps > 0 ? `${eps} Episode${eps === 1 ? '' : 's'}` : '';
         html += `
           <div class="detail-cast-card">
-            <img src="${imgUrl}" alt="${person.name}" class="detail-cast-img" loading="lazy">
+            ${hasProfile
+              ? `<img src="${imgUrl}" alt="${person.name}" class="detail-cast-img" loading="lazy">`
+              : `<div class="detail-cast-img detail-cast-img--placeholder" role="img" aria-label="${person?.name || 'Cast member'}">
+                   <svg class="detail-cast-placeholder-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" aria-hidden="true" focusable="false">
+                     <!--!Font Awesome Free v7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2025 Fonticons, Inc.-->
+                     <path d="M320 312C386.3 312 440 258.3 440 192C440 125.7 386.3 72 320 72C253.7 72 200 125.7 200 192C200 258.3 253.7 312 320 312zM290.3 368C191.8 368 112 447.8 112 546.3C112 562.7 125.3 576 141.7 576L498.3 576C514.7 576 528 562.7 528 546.3C528 447.8 448.2 368 349.7 368L290.3 368z"/>
+                   </svg>
+                 </div>`
+            }
             <div class="detail-cast-name">${person.name}</div>
             <div class="detail-cast-char">${person.character || ''}</div>
+            ${epsLabel ? `<div class="detail-cast-eps">${epsLabel}</div>` : ``}
           </div>
         `;
       });

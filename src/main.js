@@ -5,7 +5,7 @@ import { startHomePage } from "./home.js";
 import { startMoviesPage } from "./movies.js";
 import { startTVPage } from "./tv.js";
 import { startRuntimeTags, getGenreName, setupRail, startMovieCards, disposeUI, createMovieCard } from "./ui.js";
-import { sleep, prettyUrlToFile, fileUrlToPretty } from "./utils.js";
+import { sleep, prettyUrlToFile, fileUrlToPretty, attachCardNavigationHandlers } from "./utils.js";
 
 import { PAGE_TRANSITION_DURATION_MS, SEARCH_DEBOUNCE_MS, MAX_SEARCH_RESULTS, CARD_WIDTH_PX, DEFAULT_CONTAINER_WIDTH_PX, MIN_SKELETON_COUNT, MAX_SKELETON_COUNT_SEARCH, MIN_SEARCH_QUERY_LENGTH, TRUNCATION_THRESHOLD_PX, SEARCH_RESULT_GENRE_LIMIT } from "./constants.js";
 
@@ -444,13 +444,72 @@ function startSearchFunctionality() {
     let activeIndex = -1;
     let items = [];
 
+    const PERSON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" aria-hidden="true" focusable="false"><path d="M320 312C386.3 312 440 258.3 440 192C440 125.7 386.3 72 320 72C253.7 72 200 125.7 200 192C200 258.3 253.7 312 320 312zM290.3 368C191.8 368 112 447.8 112 546.3C112 562.7 125.3 576 141.7 576L498.3 576C514.7 576 528 562.7 528 546.3C528 447.8 448.2 368 349.7 368L290.3 368z"/></svg>`;
+
     const doSearch = async (q) => {
       if (!q || q.trim().length < MIN_SEARCH_QUERY_LENGTH) { renderResults([]); return; }
       try {
-        const data = await fetchTMDBData(`/search/multi?query=${encodeURIComponent(q)}&include_adult=false`);
-        let results = Array.isArray(data?.results) ? data.results : [];
-        results = results.filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !!r.poster_path);
-        renderResults(results.slice(0, MAX_SEARCH_RESULTS));
+        const query = q.trim();
+        const norm = (s) => String(s || '').trim().toLowerCase();
+        const pop = (x) => Number(x?.popularity) || 0;
+        const votes = (x) => Number(x?.vote_count) || 0;
+        const rating = (x) => Number(x?.vote_average) || 0;
+        const [multi, kw] = await Promise.all([
+          fetchTMDBData(`/search/multi?query=${encodeURIComponent(query)}&include_adult=false`),
+          fetchTMDBData(`/search/keyword?query=${encodeURIComponent(query)}`)
+        ]);
+
+        const multiResults = Array.isArray(multi?.results) ? multi.results : [];
+        const keywords = Array.isArray(kw?.results) ? kw.results : [];
+
+        let entries = multiResults
+          .filter((r) => {
+            const mt = r?.media_type;
+            return mt === 'movie' || mt === 'tv' || mt === 'person';
+          })
+          .map((r) => ({ kind: r.media_type, data: r }));
+
+        // Keywords: only apply if the keyword matches the query fully.
+        // Instead of showing keyword cards, blend keyword-discovered titles into the stream.
+        const exactKeyword = keywords.find((k) => norm(k?.name) === norm(query));
+        if (exactKeyword?.id) {
+          try {
+            const kid = exactKeyword.id;
+            const [km, kt] = await Promise.all([
+              fetchTMDBData(`/discover/movie?with_keywords=${encodeURIComponent(kid)}&sort_by=popularity.desc&include_adult=false&page=1`),
+              fetchTMDBData(`/discover/tv?with_keywords=${encodeURIComponent(kid)}&sort_by=popularity.desc&include_adult=false&page=1`)
+            ]);
+            const kMovies = Array.isArray(km?.results) ? km.results.map(x => ({ ...x, media_type: 'movie' })) : [];
+            const kTV = Array.isArray(kt?.results) ? kt.results.map(x => ({ ...x, media_type: 'tv' })) : [];
+            const keywordTitles = [...kMovies, ...kTV]
+              .filter(x => !!x?.poster_path)
+              .slice(0, 10)
+              .map((r) => ({ kind: r.media_type, data: r }));
+
+            if (keywordTitles.length) entries = entries.concat(keywordTitles);
+          } catch {}
+        }
+
+        const seen = new Set();
+        const uniq = [];
+        for (const e of entries) {
+          const id = e?.data?.id;
+          const kind = e?.kind;
+          const key = `${kind}:${id}`;
+          if (!id || !kind) continue;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          uniq.push(e);
+        }
+        uniq.sort((a, b) => {
+          const ap = pop(a?.data), bp = pop(b?.data);
+          if (bp !== ap) return bp - ap;
+          const av = votes(a?.data), bv = votes(b?.data);
+          if (bv !== av) return bv - av;
+          const ar = rating(a?.data), br = rating(b?.data);
+          return br - ar;
+        });
+        renderResults(uniq.slice(0, MAX_SEARCH_RESULTS));
       } catch (e) {
         renderResults([]);
       }
@@ -460,7 +519,7 @@ function startSearchFunctionality() {
       items = list;
       activeIndex = -1;
       if (!list.length) { closeSearchResults(); return; }
-      resultsEl.innerHTML = list.map(buildResultHTML).join('');
+      resultsEl.innerHTML = list.map(buildEntryHTML).join('');
       resultsEl.classList.add('open');
       Array.from(resultsEl.querySelectorAll('.search-item')).forEach((el, idx) => {
         el.id = `search-option-${idx}`;
@@ -469,6 +528,7 @@ function startSearchFunctionality() {
         el.addEventListener('mouseleave', () => setActive(-1));
         el.addEventListener('click', () => selectItem(idx));
       });
+      // Only title items include runtime badges.
       startRuntimeTags();
       requestAnimationFrame(() => {
         const titles = resultsEl.querySelectorAll('.search-title');
@@ -498,9 +558,23 @@ function startSearchFunctionality() {
       closeSearchResults();
       searchBox.classList.remove('active');
       searchToggle.setAttribute('aria-expanded', 'false');
-      const mediaType = item.media_type === 'tv' ? 'tv' : 'movie';
-      const dest = mediaType === 'tv' ? `/tv/tv:${item.id}` : `/movies/movie:${item.id}`;
-      pageTransition.navigateTo(dest);
+      if (item.kind === 'movie' || item.kind === 'tv') {
+        const r = item.data;
+        const mediaType = r.media_type === 'tv' ? 'tv' : 'movie';
+        const dest = mediaType === 'tv' ? `/tv/tv:${r.id}` : `/movies/movie:${r.id}`;
+        pageTransition.navigateTo(dest);
+        return;
+      }
+      if (item.kind === 'person') {
+        pageTransition.navigateTo(`/search?person=${encodeURIComponent(item.data.id)}`);
+        return;
+      }
+      if (item.kind === 'keyword') {
+        const kid = item.data.id;
+        const name = item.data.name || '';
+        pageTransition.navigateTo(`/search?keyword=${encodeURIComponent(kid)}&name=${encodeURIComponent(name)}`);
+        return;
+      }
     };
 
     closeSearchResults = () => {
@@ -510,7 +584,7 @@ function startSearchFunctionality() {
       activeIndex = -1;
     };
 
-    const buildResultHTML = (r) => {
+    const buildTitleResultHTML = (r) => {
       const mediaType = r.media_type;
       const poster = r.poster_path ? img.poster(r.poster_path) : '';
       const title = r.title || r.name || '';
@@ -519,19 +593,64 @@ function startSearchFunctionality() {
       const genres = Array.isArray(r.genre_ids) ? r.genre_ids.slice(0, SEARCH_RESULT_GENRE_LIMIT).map(id => getGenreName(id)).filter(Boolean).join(', ') : '';
       return `
         <div class="search-item" role="option">
-          <img class="search-thumb" src="${poster}" alt="" loading="lazy" />
+          ${poster ? `<img class="search-thumb" src="${poster}" alt="" loading="lazy" />` : `<div class="search-thumb search-thumb--placeholder"></div>`}
           <div>
             <p class="search-title" title="${title}">${title}</p>
             <div class="search-meta">
-              ${rating ? `<span class=\"search-rating\">★ ${rating}</span>` : ''}
+              ${rating ? `<span class="search-rating">★ ${rating}</span>` : ''}
               <span class="meta-tag type">${mediaType === 'tv' ? 'Show' : 'Movie'}</span>
               <span class="meta-tag runtime"><span class="meta-runtime" data-id="${r.id}" data-type="${mediaType}">--</span></span>
-              ${year ? `<span class=\"meta-tag year\">${year}</span>` : ''}
+              ${year ? `<span class="meta-tag year">${year}</span>` : ''}
             </div>
-            ${genres ? `<div class=\"search-genres\">${genres}</div>` : ''}
+            ${genres ? `<div class="search-genres">${genres}</div>` : ''}
           </div>
         </div>
       `;
+    };
+
+    const buildPersonResultHTML = (p) => {
+      const name = p?.name || 'Unknown';
+      const dept = p?.known_for_department || 'Person';
+      const profile = p?.profile_path ? img.poster(p.profile_path) : '';
+      return `
+        <div class="search-item search-item--person" role="option">
+          ${profile
+            ? `<img class="search-thumb" src="${profile}" alt="" loading="lazy" />`
+            : `<div class="search-thumb search-thumb--placeholder search-thumb--person">${PERSON_SVG}</div>`
+          }
+          <div>
+            <p class="search-title" title="${name}">${name}</p>
+            <div class="search-meta">
+              <span class="meta-tag type">Person</span>
+              <span class="meta-tag">${dept}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const buildKeywordResultHTML = (k) => {
+      const name = k?.name || 'Keyword';
+      return `
+        <div class="search-item search-item--keyword" role="option">
+          <div class="search-thumb search-thumb--placeholder search-thumb--keyword">#</div>
+          <div>
+            <p class="search-title" title="${name}">${name}</p>
+            <div class="search-meta">
+              <span class="meta-tag type">Keyword</span>
+              <span class="meta-tag">Discover</span>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const buildEntryHTML = (entry) => {
+      if (!entry) return '';
+      if (entry.kind === 'movie' || entry.kind === 'tv') return buildTitleResultHTML(entry.data);
+      if (entry.kind === 'person') return buildPersonResultHTML(entry.data);
+      if (entry.kind === 'keyword') return buildKeywordResultHTML(entry.data);
+      return '';
     };
 
     searchInput.addEventListener('input', () => {
@@ -587,6 +706,11 @@ if (window.p5) {
 function startSearchPage() {
   const urlParams = new URLSearchParams(window.location.search);
   const query = urlParams.get('q');
+  const person = urlParams.get('person');
+  const keyword = urlParams.get('keyword');
+  const keywordName = urlParams.get('name');
+  if (person) { performPersonSearch(person); return; }
+  if (keyword) { performKeywordSearch(keyword, keywordName); return; }
   if (query) performSearch(query);
 }
 
@@ -599,6 +723,16 @@ async function performSearch(query) {
   const grid = document.getElementById('search-results-grid');
   if (!grid) return;
   grid.innerHTML = '';
+  const titleEl = document.getElementById('search-page-title');
+  const subtitleEl = document.getElementById('search-page-subtitle');
+  const extrasEl = document.getElementById('search-page-extras');
+  if (titleEl) titleEl.textContent = `Search results for: ${query}`;
+  if (subtitleEl) subtitleEl.textContent = 'Sorted by popularity';
+  if (extrasEl) extrasEl.innerHTML = '';
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const pop = (x) => Number(x?.popularity) || 0;
+  const votes = (x) => Number(x?.vote_count) || 0;
+  const rating = (x) => Number(x?.vote_average) || 0;
   const skeletonCount = Math.min(MAX_SKELETON_COUNT_SEARCH, Math.max(MIN_SKELETON_COUNT, Math.floor((grid.clientWidth || DEFAULT_CONTAINER_WIDTH_PX) / CARD_WIDTH_PX)));
   for (let i = 0; i < skeletonCount; i++) {
     const skel = document.createElement('article');
@@ -607,22 +741,242 @@ async function performSearch(query) {
     grid.appendChild(skel);
   }
   try {
-    const data = await fetchTMDBData(`/search/multi?query=${encodeURIComponent(query)}&include_adult=false`);
-    let results = Array.isArray(data?.results) ? data.results : [];
-    results = results.filter(r => (r.media_type === 'movie' || r.media_type === 'tv') && !!r.poster_path);
+    const [multi, kw] = await Promise.all([
+      fetchTMDBData(`/search/multi?query=${encodeURIComponent(query)}&include_adult=false`),
+      fetchTMDBData(`/search/keyword?query=${encodeURIComponent(query)}`)
+    ]);
+
+    const all = Array.isArray(multi?.results) ? multi.results : [];
+    const keywords = Array.isArray(kw?.results) ? kw.results : [];
     grid.innerHTML = '';
-    if (results.length === 0) {
+
+    const mixed = [];
+    // Use TMDB's relevance order; interleave titles + people naturally.
+    all.forEach((r) => {
+      const mt = r?.media_type;
+      if (mt === 'movie' || mt === 'tv') {
+        if (r.poster_path) mixed.push({ kind: mt, data: r });
+      } else if (mt === 'person') {
+        mixed.push({ kind: 'person', data: r });
+      }
+    });
+
+    const exactKeyword = keywords.find((k) => norm(k?.name) === norm(query));
+    if (exactKeyword?.id) {
+      const kid = exactKeyword.id;
+      try {
+        const [km, kt] = await Promise.all([
+          fetchTMDBData(`/discover/movie?with_keywords=${encodeURIComponent(kid)}&sort_by=popularity.desc&include_adult=false&page=1`),
+          fetchTMDBData(`/discover/tv?with_keywords=${encodeURIComponent(kid)}&sort_by=popularity.desc&include_adult=false&page=1`)
+        ]);
+        const kMovies = Array.isArray(km?.results) ? km.results.map(x => ({ ...x, media_type: 'movie' })) : [];
+        const kTV = Array.isArray(kt?.results) ? kt.results.map(x => ({ ...x, media_type: 'tv' })) : [];
+        const keywordTitles = [...kMovies, ...kTV].filter(x => !!x?.poster_path).map((r) => ({ kind: r.media_type, data: r }));
+
+        const blended = [];
+        const base = mixed.slice(0, 60);
+        const add = keywordTitles.slice(0, 60);
+        let i = 0, j = 0;
+        while ((i < base.length || j < add.length) && blended.length < 120) {
+          if (i < base.length) blended.push(base[i++]);
+          if (j < add.length) blended.push(add[j++]);
+        }
+        const seen = new Set();
+        mixed.length = 0;
+        blended.forEach((e) => {
+          const id = e?.data?.id;
+          const kind = e?.kind;
+          const key = `${kind}:${id}`;
+          if (!id || !kind) return;
+          if (seen.has(key)) return;
+          seen.add(key);
+          mixed.push(e);
+        });
+      } catch {}
+    }
+
+    if (mixed.length === 0) {
       grid.innerHTML = '<div class="no-results">No results found.</div>';
       return;
     }
-    results.forEach(movie => {
-      const card = createMovieCard(movie);
-      grid.appendChild(card);
+    mixed.sort((a, b) => {
+      const ap = pop(a?.data), bp = pop(b?.data);
+      if (bp !== ap) return bp - ap;
+      const av = votes(a?.data), bv = votes(b?.data);
+      if (bv !== av) return bv - av;
+      const ar = rating(a?.data), br = rating(b?.data);
+      return br - ar;
+    });
+    mixed.slice(0, 80).forEach((entry) => {
+      if (entry.kind === 'movie' || entry.kind === 'tv') {
+        grid.appendChild(createMovieCard(entry.data));
+      } else if (entry.kind === 'person') {
+        grid.appendChild(createPersonCard(entry.data));
+      }
     });
     startMovieCards();
     startRuntimeTags();
   } catch (error) {
     console.error('Search failed for query:', query, error);
     grid.innerHTML = '<div class="error">Search failed. Please try again.</div>';
+  }
+}
+
+/**
+ * Render a person page (actors/directors) from TMDB person id.
+ * @param {string|number} personId
+ */
+async function performPersonSearch(personId) {
+  const grid = document.getElementById('search-results-grid');
+  if (!grid) return;
+  const titleEl = document.getElementById('search-page-title');
+  const subtitleEl = document.getElementById('search-page-subtitle');
+  const extrasEl = document.getElementById('search-page-extras');
+  if (extrasEl) extrasEl.innerHTML = '';
+
+  if (titleEl) titleEl.textContent = 'Loading person…';
+  if (subtitleEl) subtitleEl.textContent = '';
+  grid.innerHTML = '<div class="episodes-loading">Loading…</div>';
+
+  try {
+    const [person, credits] = await Promise.all([
+      fetchTMDBData(`/person/${encodeURIComponent(personId)}`),
+      fetchTMDBData(`/person/${encodeURIComponent(personId)}/combined_credits`)
+    ]);
+
+    const name = person?.name || 'Person';
+    if (titleEl) titleEl.textContent = name;
+    if (subtitleEl) subtitleEl.textContent = 'Credits';
+
+    const cast = Array.isArray(credits?.cast) ? credits.cast : [];
+    const crew = Array.isArray(credits?.crew) ? credits.crew : [];
+
+    const dedupe = (arr) => {
+      const seen = new Set();
+      return arr.filter((x) => {
+        const key = `${x?.media_type || ''}:${x?.id || ''}`;
+        if (!x?.id || !x?.media_type) return false;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    };
+
+    const merged = dedupe([
+      ...crew.filter(c => (c?.job === 'Director' || c?.known_for_department === 'Directing') && !!c?.poster_path),
+      ...cast.filter(c => !!c?.poster_path),
+    ]);
+    merged.sort((a, b) => (b?.popularity || 0) - (a?.popularity || 0));
+
+    grid.innerHTML = '';
+    if (!merged.length) {
+      grid.innerHTML = '<div class="no-results">No credits found.</div>';
+      return;
+    }
+    merged.slice(0, 80).forEach((m) => grid.appendChild(createMovieCard(m)));
+    startMovieCards();
+    startRuntimeTags();
+  } catch (e) {
+    console.error('Failed to load person', personId, e);
+    grid.innerHTML = '<div class="error">Failed to load person.</div>';
+  }
+}
+
+function createPersonCard(person) {
+  const card = document.createElement('article');
+  card.className = 'movie-card entity-card entity-card--person';
+  try { card.setAttribute('tabindex', '0'); } catch {}
+  try { card.setAttribute('data-id', String(person?.id || '')); card.setAttribute('data-type', 'person'); } catch {}
+
+  const name = person?.name || 'Person';
+  const dept = person?.known_for_department || 'Person';
+  const profile = person?.profile_path ? img.poster(person.profile_path) : '';
+  const PERSON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" aria-hidden="true" focusable="false"><path d="M320 312C386.3 312 440 258.3 440 192C440 125.7 386.3 72 320 72C253.7 72 200 125.7 200 192C200 258.3 253.7 312 320 312zM290.3 368C191.8 368 112 447.8 112 546.3C112 562.7 125.3 576 141.7 576L498.3 576C514.7 576 528 562.7 528 546.3C528 447.8 448.2 368 349.7 368L290.3 368z"/></svg>`;
+
+  card.innerHTML = `
+    ${profile
+      ? `<img src="${profile}" alt="${name}" class="poster-img loaded" loading="lazy">`
+      : `<div class="poster-skeleton entity-poster">${PERSON_SVG}</div>`
+    }
+    <div class="movie-info"><h3 class="movie-title">${name}</h3></div>
+    <div class="movie-overlay">
+      <div class="overlay-content">
+        <div class="overlay-tags">
+          <span class="meta-tag type">Person</span>
+          <span class="meta-tag">${dept}</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const pid = person?.id;
+  if (pid) attachCardNavigationHandlers(card, `/search?person=${encodeURIComponent(pid)}`);
+  return card;
+}
+
+function createKeywordCard(keyword) {
+  const card = document.createElement('article');
+  card.className = 'movie-card entity-card entity-card--keyword';
+  try { card.setAttribute('tabindex', '0'); } catch {}
+  try { card.setAttribute('data-id', String(keyword?.id || '')); card.setAttribute('data-type', 'keyword'); } catch {}
+
+  const name = keyword?.name || 'Keyword';
+  const kid = keyword?.id;
+  card.innerHTML = `
+    <div class="poster-skeleton entity-poster entity-poster--keyword">#</div>
+    <div class="movie-info"><h3 class="movie-title"># ${name}</h3></div>
+    <div class="movie-overlay">
+      <div class="overlay-content">
+        <div class="overlay-tags">
+          <span class="meta-tag type">Keyword</span>
+          <span class="meta-tag">Discover</span>
+        </div>
+      </div>
+    </div>
+  `;
+  if (kid) attachCardNavigationHandlers(card, `/search?keyword=${encodeURIComponent(kid)}&name=${encodeURIComponent(name)}`);
+  return card;
+}
+
+/**
+ * Render a keyword discovery page.
+ * @param {string|number} keywordId
+ * @param {string|null} keywordName
+ */
+async function performKeywordSearch(keywordId, keywordName = null) {
+  const grid = document.getElementById('search-results-grid');
+  if (!grid) return;
+  const titleEl = document.getElementById('search-page-title');
+  const subtitleEl = document.getElementById('search-page-subtitle');
+  const extrasEl = document.getElementById('search-page-extras');
+  if (extrasEl) extrasEl.innerHTML = '';
+
+  const label = (keywordName && String(keywordName).trim()) ? `# ${keywordName}` : `Keyword ${keywordId}`;
+  if (titleEl) titleEl.textContent = label;
+  if (subtitleEl) subtitleEl.textContent = 'Discover by keyword';
+
+  grid.innerHTML = '<div class="episodes-loading">Loading…</div>';
+  try {
+    const [movies, tv] = await Promise.all([
+      fetchTMDBData(`/discover/movie?with_keywords=${encodeURIComponent(keywordId)}&sort_by=popularity.desc&include_adult=false&page=1`),
+      fetchTMDBData(`/discover/tv?with_keywords=${encodeURIComponent(keywordId)}&sort_by=popularity.desc&include_adult=false&page=1`)
+    ]);
+
+    const mArr = (Array.isArray(movies?.results) ? movies.results : []).map(x => ({ ...x, media_type: 'movie' }));
+    const tArr = (Array.isArray(tv?.results) ? tv.results : []).map(x => ({ ...x, media_type: 'tv' }));
+    const merged = [...mArr, ...tArr].filter(x => !!x?.poster_path);
+    merged.sort((a, b) => (b?.popularity || 0) - (a?.popularity || 0));
+
+    grid.innerHTML = '';
+    if (!merged.length) {
+      grid.innerHTML = '<div class="no-results">No results found.</div>';
+      return;
+    }
+    merged.slice(0, 60).forEach((m) => grid.appendChild(createMovieCard(m)));
+    startMovieCards();
+    startRuntimeTags();
+  } catch (e) {
+    console.error('Failed to load keyword', keywordId, e);
+    grid.innerHTML = '<div class="error">Failed to load keyword results.</div>';
   }
 }

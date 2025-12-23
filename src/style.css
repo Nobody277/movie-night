@@ -238,9 +238,18 @@ canvas.p5Canvas {
   display: none;
 }
 .search-results.open { display: block; }
+.search-group { padding: 2px 0; }
+.search-group + .search-group { margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; }
+.search-group-title {
+  font-size: 11px;
+  color: rgba(230,230,230,0.65);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  margin: 4px 6px 8px;
+}
 .search-item {
   display: grid;
-  grid-template-columns: 40px 1fr auto;
+  grid-template-columns: 40px 1fr;
   gap: 12px;
   align-items: center;
   padding: 10px;
@@ -252,6 +261,21 @@ canvas.p5Canvas {
 .search-item + .search-item { margin-top: 6px; }
 .search-item:hover, .search-item.active { background: rgba(21,25,35,0.92); }
 .search-thumb { width: 40px; height: 60px; object-fit: cover; border-radius: 6px; background: rgba(255,255,255,0.06); }
+.search-thumb--placeholder {
+  display: grid;
+  place-items: center;
+  color: rgba(230,230,230,0.7);
+  font-weight: 700;
+  font-size: 14px;
+}
+.search-thumb--person svg {
+  width: 68%;
+  height: 68%;
+  fill: rgba(230,230,230,0.72);
+}
+.search-thumb--keyword {
+  background: rgba(255,255,255,0.06);
+}
 .search-title {
   font-size: 14px;
   color: var(--text);
@@ -266,6 +290,25 @@ canvas.p5Canvas {
 .search-meta .meta-tag { font-size: 10px; padding: 2px 6px; }
 .search-genres { font-size: 11px; color: var(--muted); opacity: 0.85; margin-top: 6px; }
 .search-rating { font-size: 12px; color: #ffd700; font-weight: 600; }
+
+/* Search page extras (people/keywords chips) */
+.search-extras-block { margin: 0 0 12px; }
+.search-extras-title {
+  font-size: 12px;
+  color: rgba(230,230,230,0.75);
+  margin: 0 0 8px;
+}
+.search-extras-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.search-chip {
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(21,25,35,0.65);
+  color: var(--text);
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.search-chip:hover { background: rgba(21,25,35,0.85); }
 
 .search-input {
   width: 100%;
@@ -584,6 +627,28 @@ canvas.p5Canvas {
   box-shadow: 0 12px 36px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.05);
   transition: background-color 120ms ease;
   cursor: pointer;
+}
+
+.entity-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.06);
+  color: rgba(230,230,230,0.75);
+  font-weight: 800;
+  font-size: 26px;
+}
+
+.entity-poster svg {
+  width: 58%;
+  height: 58%;
+  fill: rgba(230, 230, 230, 0.72);
+}
+
+.entity-poster--keyword {
+  font-size: 32px;
+  letter-spacing: 1px;
 }
 
 .movie-card:hover {
@@ -1991,6 +2056,20 @@ canvas.p5Canvas {
   background: rgba(255,255,255,0.04);
 }
 
+.detail-cast-img--placeholder {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  display: grid;
+  place-items: center;
+}
+
+.detail-cast-placeholder-icon {
+  width: 56%;
+  height: 56%;
+  fill: rgba(230, 230, 230, 0.72);
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,0.25));
+}
+
 .detail-cast-name {
   font-size: 14px;
   color: var(--text);
@@ -2003,6 +2082,15 @@ canvas.p5Canvas {
 .detail-cast-char {
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-cast-eps {
+  font-size: 12px;
+  color: rgba(230, 230, 230, 0.75);
+  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -187,6 +187,8 @@ export function startMovieCards() {
     
     const id = card.getAttribute('data-id');
     const type = card.getAttribute('data-type') || 'movie';
+
+    if (!(type === 'movie' || type === 'tv')) return;
     
     const btn = document.createElement('button');
     btn.className = 'card-add';
